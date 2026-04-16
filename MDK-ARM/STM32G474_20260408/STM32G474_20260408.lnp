@@ -4,6 +4,7 @@
 "stm32g474_20260408\stm32g4xx_it.o"
 "stm32g474_20260408\stm32g4xx_hal_msp.o"
 "stm32g474_20260408\foc_bridge.o"
+"stm32g474_20260408\fluxobserver_pll.o"
 "stm32g474_20260408\stm32g4xx_hal_adc.o"
 "stm32g474_20260408\stm32g4xx_hal_adc_ex.o"
 "stm32g474_20260408\stm32g4xx_ll_adc.o"

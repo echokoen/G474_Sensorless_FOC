@@ -115,6 +115,9 @@ int main(void)
 
   printf("FOC stage1 voltage open-loop ready\r\n");
 
+  /* 调试输出：低频打印开环/观测器状态，便于上位机或串口终端观察稳定性。 */
+  uint32_t last_dbg_tick = HAL_GetTick();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,6 +130,18 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     FOC_TaskBackground();
+
+    if ((HAL_GetTick() - last_dbg_tick) >= 20u)
+    {
+      last_dbg_tick = HAL_GetTick();
+      printf("%.3f,%.3f,%.3f,%.3f,%.3f,%u\r\n",
+             FOC_GetOpenLoopFreqHz(),
+             FOC_GetOpenLoopThetaErad(),
+             FOC_GetObservedThetaRad(),
+             FOC_GetObservedSpeedRadPerSec(),
+             FOC_GetObservedAngleErrDeg(),
+             (unsigned)FOC_IsObserverLocked());
+    }
 
    
   }

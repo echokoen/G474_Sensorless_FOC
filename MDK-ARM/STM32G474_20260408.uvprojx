@@ -429,6 +429,16 @@
               <FileType>1</FileType>
               <FilePath>..\Core\Src\foc_bridge.c</FilePath>
             </File>
+            <File>
+              <FileName>FluxObserver_PLL.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\PMSM_Control_Core\FluxObserver_PLL.h</FilePath>
+            </File>
+            <File>
+              <FileName>FluxObserver_PLL.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\PMSM_Control_Core\FluxObserver_PLL.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

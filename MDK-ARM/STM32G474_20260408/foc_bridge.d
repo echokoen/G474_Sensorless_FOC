@@ -43,4 +43,5 @@ stm32g474_20260408\foc_bridge.o: ../Drivers/BSP/bsp_adc.h
 stm32g474_20260408\foc_bridge.o: ../Drivers/BSP/bsp_tim.h
 stm32g474_20260408\foc_bridge.o: ../Drivers/BSP/bsp_gpio.h
 stm32g474_20260408\foc_bridge.o: ../Core/Inc/foc_config.h
+stm32g474_20260408\foc_bridge.o: ../Core/Inc/PMSM_Control_Core/FluxObserver_PLL.h
 stm32g474_20260408\foc_bridge.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
