@@ -7,16 +7,17 @@
   * @details
   * ��ǰ�����е� ADC ��Դ�����ֿܷ�ʹ�ã�
   *
-  * 1. ADC1 -> ������ -> ĸ�ߵ�ѹ VBUS
-  *    - ʹ�� PA3 / ADC1_IN4
-  *    - ��������ת��
-  *    - ��Ƶ����ͨ�� HAL_ADC_GetValue(&hadc1) ��ȡ���һ�ι���ת�����
-  *
-  * 2. ADC2 -> ע���� -> U/V �������
-  *    - ʹ�� PC1 / ADC12_IN7 �� U �����
-  *    - ʹ�� PC2 / ADC12_IN8 �� V �����
-  *    - �� TIM1_TRGO ͬ������ע��ת��
-  *    - ADC2 ע����ת����ɺ󴥷��жϣ��ڻص��н����Ƶ������·
+ * 1. ADC1 -> ������ -> ĸ�ߵ�ѹ VBUS
+ *    - ʹ�� PA3 / ADC1_IN4
+ *    - ��������ת��
+ *    - ��Ƶ����ͨ�� HAL_ADC_GetValue(&hadc1) ��ȡ���һ�ι���ת�����
+ *
+ * 2. ADC2 -> ע���� -> U/V/W �������
+ *    - ʹ�� PC1 / ADC12_IN7 �� U �����
+ *    - ʹ�� PC2 / ADC12_IN8 �� V �����
+ *    - ʹ�� PC3 / ADC12_IN9 �� W �����
+ *    - �� TIM1_TRGO ͬ������ע��ת��
+ *    - ADC2 ע����ת����ɺ󴥷��жϣ��ڻص��н����Ƶ������·
   *
   * ������Ƶ�Ŀ�ģ�
   * - ������������ FOC ��Ƶ�ؼ���·��Ҫ��ʵʱ���ȶ������ܱ��������ϡ�
@@ -29,7 +30,7 @@
 /* ADC1 �����飺ĸ�ߵ�ѹ */
 ADC_HandleTypeDef hadc1;
 
-/* ADC2 ע���飺U/V ������� */
+/* ADC2 ע���飺U/V/W ������� */
 ADC_HandleTypeDef hadc2;
 
 
@@ -51,7 +52,7 @@ void MX_ADC1_Init(void)
    * 4. ��Ƶ������ֱ�Ӷ�ȡ���һ��ת���������
    */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.GainCompensation = 0;
@@ -70,6 +71,10 @@ void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
   multimode.Mode = ADC_MODE_INDEPENDENT;
   if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
@@ -80,10 +85,11 @@ void MX_ADC1_Init(void)
   /*
    * ������ͨ�����ã�
    * PA3 -> ADC1_IN4 -> ĸ�ߵ�ѹ VBUS
+   * 采样时间按正点原子例程使用 640.5 周期，给母线分压网络更长的采样保持时间。
    */
   sConfig.Channel = ADC_CHANNEL_4;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_47CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_640CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -104,7 +110,7 @@ void MX_ADC2_Init(void)
 
 
     hadc2.Instance = ADC2;
-    hadc2.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+    hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
     hadc2.Init.Resolution = ADC_RESOLUTION_12B;
     hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
     hadc2.Init.GainCompensation = 0;
@@ -125,6 +131,10 @@ void MX_ADC2_Init(void)
 
         Error_Handler();
     }
+    if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK)
+    {
+        Error_Handler();
+    }
 
 
     sConfigInjected.InjectedChannel = ADC_CHANNEL_7;
@@ -133,7 +143,7 @@ void MX_ADC2_Init(void)
     sConfigInjected.InjectedSingleDiff = ADC_SINGLE_ENDED;
     sConfigInjected.InjectedOffsetNumber = ADC_OFFSET_NONE;
     sConfigInjected.InjectedOffset = 0;
-    sConfigInjected.InjectedNbrOfConversion = 2;
+    sConfigInjected.InjectedNbrOfConversion = 3;
     sConfigInjected.InjectedDiscontinuousConvMode = DISABLE;
     sConfigInjected.AutoInjectedConv = DISABLE;
     sConfigInjected.QueueInjectedContext = DISABLE;
@@ -149,6 +159,13 @@ void MX_ADC2_Init(void)
 
     sConfigInjected.InjectedChannel = ADC_CHANNEL_8;
     sConfigInjected.InjectedRank = ADC_INJECTED_RANK_2;
+    if (HAL_ADCEx_InjectedConfigChannel(&hadc2, &sConfigInjected) != HAL_OK)
+    {
+        Error_Handler();
+    }
+
+    sConfigInjected.InjectedChannel = ADC_CHANNEL_9;
+    sConfigInjected.InjectedRank = ADC_INJECTED_RANK_3;
     if (HAL_ADCEx_InjectedConfigChannel(&hadc2, &sConfigInjected) != HAL_OK)
     {
         Error_Handler();
@@ -199,7 +216,7 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef *adcHandle)
         }
         else
         {
-            GPIO_InitStruct.Pin = M1_CURR_AMPL_U_Pin | M1_CURR_AMPL_V_Pin;
+            GPIO_InitStruct.Pin = M1_CURR_AMPL_U_Pin | M1_CURR_AMPL_V_Pin | M1_CURR_AMPL_W_Pin;
             GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
             GPIO_InitStruct.Pull = GPIO_NOPULL;
             HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
@@ -230,7 +247,7 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef *adcHandle)
     }
     else
     {
-      HAL_GPIO_DeInit(GPIOC, M1_CURR_AMPL_U_Pin | M1_CURR_AMPL_V_Pin);
+      HAL_GPIO_DeInit(GPIOC, M1_CURR_AMPL_U_Pin | M1_CURR_AMPL_V_Pin | M1_CURR_AMPL_W_Pin);
     }
 
     /*

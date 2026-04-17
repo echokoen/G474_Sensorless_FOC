@@ -2,36 +2,48 @@
 #include "PMSM_Control_Core/FluxObserver_PLL.h"
 #include <math.h>
 
-/* 第二阶段：observer 后台运行，但不接管主控制角。
- * 为什么这样做：先保持开环控制不变，只让观测器跟踪，
- * 便于验证角度和速度估算是否收敛。 */
+/* FOC 桥接层。
+ *
+ * 这一层更像“胶水代码”：
+ * - 上面连着中断、PWM、ADC 和 GPIO；
+ * - 下面连着开环控制和 observer；
+ * - 中间负责把采样、状态机、保护和调试串成一条稳定的路径。
+ *
+ * 调试时最重要的不是每一项都很聪明，而是每一项都足够可解释。
+ * 所以这里的实现优先保证：
+ * - 顺序清晰；
+ * - 状态明确；
+ * - 便于串口打印和上位机观察。
+ */
 
 extern TIM_HandleTypeDef htim1;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 
-static volatile FOC_StateTypeDef s_state = FOC_STATE_IDLE;
-static volatile float s_iu_offset_v = 0.0f;
-static volatile float s_iv_offset_v = 0.0f;
-static volatile float s_vbus_v = 0.0f;
-static volatile float s_iu_a = 0.0f;
-static volatile float s_iv_a = 0.0f;
-static volatile float s_iw_a = 0.0f;
-static volatile uint32_t s_offset_samples = 0u;
-static volatile float s_offset_sum_u = 0.0f;
-static volatile float s_offset_sum_v = 0.0f;
-static volatile uint32_t s_align_ticks = 0u;
-static volatile float s_openloop_mech_freq_hz = FOC_OPENLOOP_START_FREQ_HZ;
-static volatile float s_openloop_theta_e_rad = 0.0f;
-static volatile uint8_t s_adc1_ready = 0u;
-static volatile uint8_t s_is_running = 0u;
+static volatile FOC_StateTypeDef s_state = FOC_STATE_IDLE;           /* 当前 FOC 状态机状态。 */
+static volatile float s_iu_offset_v = 0.0f;                          /* U 相电流采样零点电压。 */
+static volatile float s_iv_offset_v = 0.0f;                          /* V 相电流采样零点电压。 */
+static volatile float s_iw_offset_v = 0.0f;                          /* W 相电流采样零点电压。 */
+static volatile float s_vbus_v = 0.0f;                               /* 母线电压，单位伏。 */
+static volatile float s_iu_a = 0.0f;                                 /* U 相电流，单位安。 */
+static volatile float s_iv_a = 0.0f;                                 /* V 相电流，单位安。 */
+static volatile float s_iw_a = 0.0f;                                 /* W 相电流，单位安。 */
+static volatile uint32_t s_offset_samples = 0u;                      /* 当前已经用于偏置平均的样本数。 */
+static volatile float s_offset_sum_u = 0.0f;                         /* U 相偏置累加和。 */
+static volatile float s_offset_sum_v = 0.0f;                         /* V 相偏置累加和。 */
+static volatile float s_offset_sum_w = 0.0f;                         /* W 相偏置累加和。 */
+static volatile uint32_t s_align_ticks = 0u;                         /* 对齐阶段已经运行的拍数。 */
+static volatile float s_openloop_mech_freq_hz = FOC_OPENLOOP_START_FREQ_HZ; /* 开环机械频率。 */
+static volatile float s_openloop_theta_e_rad = 0.0f;                 /* 当前开环电角度。 */
+static volatile uint8_t s_adc1_ready = 0u;                           /* ADC1 是否已进入可用状态。 */
+static volatile uint8_t s_is_running = 0u;                           /* 当前是否处于运行态。 */
 
 /* observer 后台状态 */
-static volatile float s_obs_theta_rad = 0.0f;
-static volatile float s_obs_speed_rad_s = 0.0f;
-static volatile float s_obs_angle_err_deg = 0.0f;
-static volatile uint8_t s_obs_locked = 0u;
-static volatile uint32_t s_obs_hold_ticks = 0u;
+static volatile float s_obs_theta_rad = 0.0f;                        /* observer 输出的电角度。 */
+static volatile float s_obs_speed_rad_s = 0.0f;                      /* observer 输出的电角速度。 */
+static volatile float s_obs_angle_err_deg = 0.0f;                    /* 开环角与观测角的误差，单位度。 */
+static volatile uint8_t s_obs_locked = 0u;                           /* observer 是否被判定为锁定。 */
+static volatile uint32_t s_obs_hold_ticks = 0u;                      /* 锁定条件连续满足的拍数。 */
 
 /* donor FluxObserver_PLL 只作为后台计算内核保留。 */
 static struct FluxObserver_PLL_t s_flux_obs = {0};
@@ -41,11 +53,31 @@ static inline float foc_adc_to_voltage(uint16_t raw)
   return ((float)raw * FOC_ADC_VREF) / FOC_ADC_FULL_SCALE;
 }
 
+/* 把 ADC 电压转换成相电流。
+ *
+ * 公式含义：
+ * - 先把 ADC 原始值换成电压；
+ * - 再减去零点偏置；
+ * - 最后除以“采样电阻 x 放大倍数”得到电流。
+ *
+ * `sign` 用来统一不同板子上的电流方向定义。
+ * 如果电流方向和你的物理接线相反，后面看到的相电流也会反。
+ */
 static inline float foc_current_from_adc(float vadc, float offset_v, float sign)
 {
   return sign * ((vadc - offset_v) / (FOC_GAIN * FOC_SHUNT_OHM));
 }
 
+static inline float foc_adc_to_bus_voltage(uint16_t raw)
+{
+  return foc_adc_to_voltage(raw) * FOC_VBUS_RATIO;
+}
+
+/* 把角度包到 [0, 2pi)。
+ *
+ * 角度在控制里通常只关心“当前相位”，不关心绝对累计值。
+ * 所以每次积分后把角度折回这个区间，可以避免浮点数一直累加。
+ */
 static inline float foc_wrap_2pi(float angle)
 {
   const float two_pi = 6.2831853071795864769f;
@@ -54,6 +86,13 @@ static inline float foc_wrap_2pi(float angle)
   return angle;
 }
 
+/* 把角度包到 [-pi, pi]。
+ *
+ * 这个区间特别适合算“角差”：
+ * - 正负号能直接告诉你偏前还是偏后；
+ * - 数值不会在 0 和 2pi 之间跳来跳去；
+ * - 串口或上位机画图时更容易看出误差是否收敛。
+ */
 static inline float foc_wrap_pi(float angle)
 {
   const float pi = 3.14159265358979323846f;
@@ -63,11 +102,19 @@ static inline float foc_wrap_pi(float angle)
   return angle;
 }
 
+/* 调试打印时把弧度转成角度，便于在上位机里直观看误差。 */
 static inline float foc_rad_to_deg(float rad)
 {
   return rad * 57.29577951308232f;
 }
 
+/* 限制 PWM 比较值，避免写出边界以外的占空比。
+ *
+ * 在 SVPWM 里，比较值贴边通常意味着：
+ * - 调制已经超出安全范围；
+ * - 或者母线电压、参考电压有问题；
+ * 所以这里保留少量余量。
+ */
 static inline uint16_t foc_clamp_ccr(int32_t ccr)
 {
   if (ccr < (int32_t)FOC_SVPWM_MIN_CCR) return FOC_SVPWM_MIN_CCR;
@@ -75,6 +122,13 @@ static inline uint16_t foc_clamp_ccr(int32_t ccr)
   return (uint16_t)ccr;
 }
 
+/* 把三相 PWM 都置于半周期中点。
+ *
+ * 中点输出等效于零矢量，适合做：
+ * - 停机保持；
+ * - 偏置校准；
+ * - 故障后的安全收回。
+ */
 static void foc_set_tim1_mid(void)
 {
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, FOC_PWM_HALF_ARR);
@@ -82,11 +136,21 @@ static void foc_set_tim1_mid(void)
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, FOC_PWM_HALF_ARR);
 }
 
+/* 控制驱动器使能脚。
+ *
+ * 这里不做任何复杂状态判断，只做最直接的使能控制。
+ * 驱动器是否真正上电，还要配合 PWM 和外部硬件条件一起看。
+ */
 static void foc_drive_enable(uint8_t enable)
 {
   HAL_GPIO_WritePin(M1_EN_DRIVER_GPIO_Port, M1_EN_DRIVER_Pin, enable ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+/* 读取母线电压。
+ *
+ * 母线电压是 SVPWM 的归一化基准。
+ * 如果它读错了，等效上就是“你以为输出了 4V，实际上可能输出了完全不同的电压比例”。
+ */
 static void foc_update_vbus(void)
 {
   if (s_adc1_ready == 0u)
@@ -94,21 +158,45 @@ static void foc_update_vbus(void)
     s_vbus_v = 24.0f;
     return;
   }
+
   uint16_t raw = (uint16_t)HAL_ADC_GetValue(&hadc1);
-  s_vbus_v = foc_adc_to_voltage(raw) * FOC_VBUS_RATIO;
+  s_vbus_v = foc_adc_to_bus_voltage(raw);
 }
 
+/* 读取三相电流。
+ *
+ * 当前通道按正点原子 DMG474 硬件定义：
+ * - PC1 / ADC12_IN7 -> U 相；
+ * - PC2 / ADC12_IN8 -> V 相；
+ * - PC3 / ADC12_IN9 -> W 相。
+ */
 static void foc_update_currents(void)
 {
   uint16_t raw_u = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
   uint16_t raw_v = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_2);
+  uint16_t raw_w = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_3);
   float vu = foc_adc_to_voltage(raw_u);
   float vv = foc_adc_to_voltage(raw_v);
+  float vw = foc_adc_to_voltage(raw_w);
   s_iu_a = foc_current_from_adc(vu, s_iu_offset_v, FOC_CURR_SIGN_U);
   s_iv_a = foc_current_from_adc(vv, s_iv_offset_v, FOC_CURR_SIGN_V);
-  s_iw_a = -(s_iu_a + s_iv_a);
+  s_iw_a = foc_current_from_adc(vw, s_iw_offset_v, FOC_CURR_SIGN_W);
 }
 
+void FOC_SamplingUpdate(void)
+{
+  foc_update_vbus();
+  foc_update_currents();
+}
+
+/* 检查运行中的基本故障条件。
+ *
+ * 这里的保护思路很朴素：
+ * - 母线过低或过高，直接认为运行条件不成立；
+ * - 电流过大，直接认为已经超出当前阶段的安全范围。
+ *
+ * 它不是完整的工业级保护，只是第一层“快刹车”。
+ */
 static uint8_t foc_fault_check(void)
 {
   if (s_vbus_v < FOC_VBUS_UNDERVOLTAGE_V || s_vbus_v > FOC_VBUS_OVERVOLTAGE_V)
@@ -122,6 +210,15 @@ static uint8_t foc_fault_check(void)
   return 0u;
 }
 
+/* 把 alpha/beta 电压矢量换算成 TIM1 三相比较值。
+ *
+ * 计算过程：
+ * 1. 先把 alpha/beta 投影成三相等效电压；
+ * 2. 再找最大值和最小值；
+ * 3. 用零序偏置把三相一起平移到 PWM 可用范围内。
+ *
+ * 这个过程的目的不是数学好看，而是让三相都尽量在可调范围内。
+ */
 static void foc_svpwm_to_tim1(float valpha, float vbeta)
 {
   const float sqrt3 = 1.7320508075688772f;
@@ -149,37 +246,90 @@ static void foc_svpwm_to_tim1(float valpha, float vbeta)
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, foc_clamp_ccr((int32_t)(dc * (float)FOC_PWM_ARR)));
 }
 
+/* observer 更新。
+ *
+ * 这是调试里最关键的一段。
+ * 它做的事情按顺序是：
+ * - 把上一拍/当前拍的电压和电流送给观测器；
+ * - 得到磁链矢量；
+ * - 再把磁链矢量送入 PLL，提取角度和速度；
+ * - 最后算开环角和观测角之间的误差。
+ *
+ * 如果这里不稳，后面的 `locked` 就没有意义。
+ */
 static void foc_observer_update(float valpha, float vbeta)
 {
-  /* donor 磁链观测器后台运行，不接管控制，只用于验证跟踪稳定性。 */
-  s_flux_obs.Valpha_I = valpha;
-  s_flux_obs.Vbeta_I = vbeta;
-  s_flux_obs.Ialpha_I = s_iu_a;
-  s_flux_obs.Ibeta_I = (s_iu_a + 2.0f * s_iv_a) * 0.57735026919f;
+  /* 这一段是 observer 的“调试入口”。
+   *
+   * 它不直接参与控制闭环，而是做三件事：
+   * 1. 把当前拍的电压/电流喂给磁链观测器；
+   * 2. 读出观测器给出的角度和速度；
+   * 3. 根据开环角和观测角的差值，判断 observer 是否已经稳定。
+   *
+   * 也就是说，这里更像一个“观测器监视器”，而不是控制器本身。
+   */
+
+  /* 1) 组织观测器输入。
+   *
+   * `valpha / vbeta` 是当前拍用于开环输出的电压矢量，
+   * `s_iu_a / s_iv_a` 是当前拍测得的相电流。
+   *
+   * 观测器需要“电压 + 电流”一起看，才能估算出磁链。
+   */
+  s_flux_obs.Valpha_I = valpha; /* 当前拍 alpha 轴电压输入。 */
+  s_flux_obs.Vbeta_I = vbeta;    /* 当前拍 beta 轴电压输入。 */
+  s_flux_obs.Ialpha_I = s_iu_a;  /* 当前拍 alpha 轴电流输入。 */
+  s_flux_obs.Ibeta_I = (s_iu_a + 2.0f * s_iv_a) * 0.57735026919f; /* Clarke 变换得到 beta 轴电流。 */
+
+  /* 执行一次磁链观测器 + PLL 更新。
+   *
+   * 更新完成后，`s_flux_obs` 里会带回：
+   * - 估算磁链矢量；
+   * - 估算电角速度；
+   * - 估算电角度。
+   */
   FluxObserver_PLL_update(&s_flux_obs);
 
-  s_obs_theta_rad = s_flux_obs.Etheta_O;
-  s_obs_speed_rad_s = s_flux_obs.Espeed_O;
+  /* 把观测器输出缓存到本模块，供串口打印和上位机曲线使用。 */
+  s_obs_theta_rad = s_flux_obs.Etheta_O;      /* 观测到的电角度。 */
+  s_obs_speed_rad_s = s_flux_obs.Espeed_O;    /* 观测到的电角速度。 */
 
-  /* 角差先包到 [-pi, pi]，再转成角度。 */
+  /* 2) 计算开环角与观测角之间的误差。
+   *
+   * 这里先把角差包到 [-pi, pi]，再转成角度。
+   * 这样做的目的，是让误差在图上更容易看懂：
+   * - 接近 0：说明跟得比较稳；
+   * - 接近 +/-180 度：说明相位已经明显错位；
+   * - 大幅跳变：通常意味着失锁或角度绕回。
+   */
   const float angle_err_rad = foc_wrap_pi(s_openloop_theta_e_rad - s_obs_theta_rad);
   s_obs_angle_err_deg = foc_rad_to_deg(angle_err_rad);
 
-  /* lock 判定按电角频率，而不是机械频率。 */
-  const float elec_freq_hz = s_openloop_mech_freq_hz * FOC_POLE_PAIRS;
+  /* 3) 判断 observer 是否锁定。
+   *
+   * 锁定条件分两部分：
+   * - 开环机械频率要足够高，太低时磁链方向本身就不稳定；
+   * - 开环角和观测角的误差要足够小，并且要持续一段时间。
+   *
+   * 这里用“持续满足若干拍”而不是“一拍命中”，是为了避免偶发噪声把状态抖来抖去。
+   */
+  const float elec_freq_hz = s_openloop_mech_freq_hz * FOC_POLE_PAIRS; /* 机械频率换算成电频率。 */
   if (elec_freq_hz >= FOC_OBS_ENABLE_FREQ_HZ && fabsf(s_obs_angle_err_deg) < FOC_OBS_LOCK_ERR_DEG)
   {
+    /* 当前拍满足锁定条件，就把连续满足计数往上加。 */
     if (s_obs_hold_ticks < (uint32_t)(FOC_OBS_LOCK_HOLD_MS / (FOC_TS_SEC * 1000.0f)))
     {
       s_obs_hold_ticks++;
     }
     else
     {
+      /* 条件已经连续满足足够长时间，正式认为 observer 锁定。 */
       s_obs_locked = 1u;
     }
   }
   else
   {
+    /* 只要条件中断，就清空累计计数并解除锁定。 */
     s_obs_hold_ticks = 0u;
     s_obs_locked = 0u;
   }
@@ -187,14 +337,19 @@ static void foc_observer_update(float valpha, float vbeta)
 
 void FOC_BridgeInit(void)
 {
+  /* 清空所有运行态缓存，保证每次启动都从“干净状态”开始。
+   * 尤其是 observer 的内部积分状态，如果残留上一次结果，会让第一次启动表现很怪。
+   */
   s_state = FOC_STATE_IDLE;
   s_iu_offset_v = 0.0f;
   s_iv_offset_v = 0.0f;
+  s_iw_offset_v = 0.0f;
   s_vbus_v = 24.0f;
   s_iu_a = s_iv_a = s_iw_a = 0.0f;
   s_offset_samples = 0u;
   s_offset_sum_u = 0.0f;
   s_offset_sum_v = 0.0f;
+  s_offset_sum_w = 0.0f;
   s_align_ticks = 0u;
   s_openloop_mech_freq_hz = FOC_OPENLOOP_START_FREQ_HZ;
   s_openloop_theta_e_rad = 0.0f;
@@ -211,6 +366,12 @@ void FOC_BridgeInit(void)
 
 void FOC_Start(void)
 {
+  /* 启动 PWM、互补输出和 TIM1 基本定时器。
+   *
+   * 顺序上先把输出链路准备好，再让 ADC 进中断：
+   * - 这样一旦采样开始，后级状态机就有完整的执行路径；
+   * - 避免 ADC 先来、PWM 还没准备好的空窗期。
+   */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
@@ -224,7 +385,9 @@ void FOC_Start(void)
   HAL_ADCEx_InjectedStart_IT(&hadc2);
   s_is_running = 1u;
 
-  /* 重新启动时清空 observer 内核，避免残留状态影响第二阶段稳定性。 */
+  /* 重新启动时清空 observer 内核，避免上一次运行残留状态影响本次结果。
+   * 这一步很重要，因为磁链观测器和 PLL 都带积分属性。
+   */
   FluxObserver_PLL_reset(&s_flux_obs);
   s_obs_theta_rad = 0.0f;
   s_obs_speed_rad_s = 0.0f;
@@ -238,6 +401,7 @@ void FOC_Start(void)
   s_offset_samples = 0u;
   s_offset_sum_u = 0.0f;
   s_offset_sum_v = 0.0f;
+  s_offset_sum_w = 0.0f;
   s_align_ticks = 0u;
   s_openloop_mech_freq_hz = FOC_OPENLOOP_START_FREQ_HZ;
   s_openloop_theta_e_rad = 0.0f;
@@ -246,6 +410,9 @@ void FOC_Start(void)
 
 void FOC_Stop(void)
 {
+  /* 先把功率级拉回安全状态，再逐个关闭 ADC / TIM。
+   * 这样停机时不会留下半使能状态。
+   */
   FOC_FaultStop();
   HAL_ADCEx_InjectedStop_IT(&hadc2);
   HAL_ADC_Stop(&hadc1);
@@ -268,26 +435,41 @@ FOC_StateTypeDef FOC_GetState(void)
 
 void FOC_CurrentOffsetCalib(void)
 {
-  foc_set_tim1_mid();
-  foc_drive_enable(0u);
+  /* 在零电流条件下采样若干次，估计传感器偏置。
+   *
+   * 这一步相当于给电流测量找“零点”。
+   * 零点没找准，后面算出来的电流就会天然带偏置，observer 会把这个偏置当成真实物理量处理。
+   */
+  foc_set_tim1_mid();  /* 先把三相 PWM 拉到中点，避免对电流采样造成真实激励。 */
+  foc_drive_enable(0u); /* 关闭驱动器，使电流采样尽量落在“无电流”条件下。 */
 
-  uint16_t raw_u = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
-  uint16_t raw_v = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_2);
-  s_offset_sum_u += foc_adc_to_voltage(raw_u);
-  s_offset_sum_v += foc_adc_to_voltage(raw_v);
-  s_offset_samples++;
+  uint16_t raw_u = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1); /* 读取 U 相注入转换原始值。 */
+  uint16_t raw_v = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_2); /* 读取 V 相注入转换原始值。 */
+  uint16_t raw_w = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_3); /* 读取 W 相注入转换原始值。 */
+  s_offset_sum_u += foc_adc_to_voltage(raw_u); /* 累加 U 相偏置对应的电压值。 */
+  s_offset_sum_v += foc_adc_to_voltage(raw_v); /* 累加 V 相偏置对应的电压值。 */
+  s_offset_sum_w += foc_adc_to_voltage(raw_w); /* 累加 W 相偏置对应的电压值。 */
+  s_offset_samples++; /* 偏置样本计数加一。 */
 
-  if (s_offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES)
+  if (s_offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES) /* 样本数够了，就计算平均偏置。 */
   {
-    s_iu_offset_v = s_offset_sum_u / (float)s_offset_samples;
-    s_iv_offset_v = s_offset_sum_v / (float)s_offset_samples;
-    s_align_ticks = 0u;
-    s_state = FOC_STATE_ALIGN;
+    s_iu_offset_v = s_offset_sum_u / (float)s_offset_samples; /* U 相零点偏置电压。 */
+    s_iv_offset_v = s_offset_sum_v / (float)s_offset_samples; /* V 相零点偏置电压。 */
+    s_iw_offset_v = s_offset_sum_w / (float)s_offset_samples; /* W 相零点偏置电压。 */
+    s_align_ticks = 0u; /* 对齐阶段重新从头计时。 */
+    s_state = FOC_STATE_ALIGN; /* 偏置校准完成，进入对齐阶段。 */
   }
 }
 
 void FOC_AlignRun(void)
 {
+  /* 对齐阶段：
+   * - 固定定子电角度；
+   * - 输出小幅 d 轴电压；
+   * - 让转子磁极先稳定到一个已知方向。
+   *
+   * 这一步的目标不是转起来，而是“先知道自己在哪”。
+   */
   foc_set_tim1_mid();
 
   if (s_align_ticks == 0u)
@@ -295,8 +477,7 @@ void FOC_AlignRun(void)
     foc_drive_enable(1u);
   }
 
-  foc_update_vbus();
-  foc_update_currents();
+  FOC_SamplingUpdate();
   if (foc_fault_check())
   {
     FOC_FaultStop();
@@ -317,38 +498,49 @@ void FOC_AlignRun(void)
 
 void FOC_OpenLoopRun(void)
 {
-  foc_update_vbus();
-  foc_update_currents();
-  if (foc_fault_check())
+  /* 开环起转：
+   * - 频率从低速缓慢爬升到目标频率；
+   * - 电压矢量按开环角度旋转；
+   * - 每拍都把当前电压和电流送给 observer。
+   *
+   * 这一步是 observer 的“训练轨迹”。
+   * 如果开环轨迹本身不稳定，observer 没有机会自己收敛出来。
+   */
+  FOC_SamplingUpdate(); /* 刷新母线电压和相电流，供保护和后续使用。 */
+  if (foc_fault_check()) /* 若母线或电流已经越界，直接进入故障态。 */
   {
-    FOC_FaultStop();
-    return;
+    FOC_FaultStop(); /* 把输出收回到安全状态。 */
+    return; /* 故障时不继续执行后面的开环输出。 */
   }
 
-  const float ramp_rate_hz_per_s = (FOC_OPENLOOP_TARGET_FREQ_HZ - FOC_OPENLOOP_START_FREQ_HZ) / (FOC_OPENLOOP_RAMP_TIME_MS * 0.001f);
-  const float ramp_step_hz = ramp_rate_hz_per_s * FOC_TS_SEC;
-  if (s_openloop_mech_freq_hz < FOC_OPENLOOP_TARGET_FREQ_HZ)
+  const float ramp_rate_hz_per_s = (FOC_OPENLOOP_TARGET_FREQ_HZ - FOC_OPENLOOP_START_FREQ_HZ) / (FOC_OPENLOOP_RAMP_TIME_MS * 0.001f); /* 计算每秒爬升多少机械频率。 */
+  const float ramp_step_hz = ramp_rate_hz_per_s * FOC_TS_SEC; /* 把“每秒爬升量”换成“每拍爬升量”。 */
+  
+  if (s_openloop_mech_freq_hz < FOC_OPENLOOP_TARGET_FREQ_HZ) /* 如果还没爬到目标频率，就继续增加。 */
   {
-    s_openloop_mech_freq_hz += ramp_step_hz;
-    if (s_openloop_mech_freq_hz > FOC_OPENLOOP_TARGET_FREQ_HZ)
+    s_openloop_mech_freq_hz += ramp_step_hz; /* 当前拍把机械频率往上抬一点。 */
+    if (s_openloop_mech_freq_hz > FOC_OPENLOOP_TARGET_FREQ_HZ) /* 最后一步不能超过目标值。 */
     {
-      s_openloop_mech_freq_hz = FOC_OPENLOOP_TARGET_FREQ_HZ;
+      s_openloop_mech_freq_hz = FOC_OPENLOOP_TARGET_FREQ_HZ; /* 到顶后钳住。 */
     }
   }
 
-  const float two_pi = 6.2831853071795864769f;
-  s_openloop_theta_e_rad += two_pi * (s_openloop_mech_freq_hz * FOC_POLE_PAIRS) * FOC_TS_SEC;
-  s_openloop_theta_e_rad = foc_wrap_2pi(s_openloop_theta_e_rad);
+  const float two_pi = 6.2831853071795864769f; /* 2pi 常量，用于把频率积分成角度。 */
+  s_openloop_theta_e_rad += two_pi * (s_openloop_mech_freq_hz * FOC_POLE_PAIRS) * FOC_TS_SEC; /* 机械频率转成电角速度后做积分。 */
+  s_openloop_theta_e_rad = foc_wrap_2pi(s_openloop_theta_e_rad); /* 把角度限制在 [0, 2pi) 内。 */
 
-  const float valpha = FOC_OPENLOOP_VDQ_V * cosf(s_openloop_theta_e_rad);
-  const float vbeta = FOC_OPENLOOP_VDQ_V * sinf(s_openloop_theta_e_rad);
-  foc_svpwm_to_tim1(valpha, vbeta);
+  const float valpha = FOC_OPENLOOP_VDQ_V * cosf(s_openloop_theta_e_rad); /* 按当前电角度生成 alpha 轴电压分量。 */
+  const float vbeta = FOC_OPENLOOP_VDQ_V * sinf(s_openloop_theta_e_rad); /* 按当前电角度生成 beta 轴电压分量。 */
+  foc_svpwm_to_tim1(valpha, vbeta); /* 把 alpha/beta 电压换算成三相 PWM。 */
 
-  foc_observer_update(valpha, vbeta);
+  foc_observer_update(valpha, vbeta); /* 用这一拍的电压和电流更新磁链观测器与 PLL。 */
 }
 
 void FOC_FaultStop(void)
 {
+  /* 故障态的唯一目标是把输出收回到安全点。
+   * 这里不尝试自愈，避免把保护逻辑和调试逻辑混在一起。
+   */
   foc_set_tim1_mid();
   foc_drive_enable(0u);
   s_state = FOC_STATE_FAULT;
@@ -356,6 +548,13 @@ void FOC_FaultStop(void)
 
 void FOC_TaskHighFreq(void)
 {
+  /* 高速任务由 ADC 注入转换完成中断触发。
+   *
+   * 这是整个控制链最时间敏感的一层：
+   * - 一次中断对应一次采样周期；
+   * - 每次只推进状态机的一小步；
+   * - 这样能确保采样、换算、更新、输出之间的时序一致。
+   */
   switch (s_state)
   {
     case FOC_STATE_OFFSET_CALIB:
@@ -379,7 +578,9 @@ void FOC_TaskHighFreq(void)
 
 void FOC_TaskBackground(void)
 {
-  /* 第二阶段后台仅保留接口。 */
+  /* 当前版本后台没有额外任务。
+   * 接口保留着，是为了以后加慢速统计、日志整理或低频监控时不用再改上层调用。
+   */
 }
 
 float FOC_GetOpenLoopFreqHz(void) { return s_openloop_mech_freq_hz; }
@@ -392,3 +593,24 @@ float FOC_GetObservedThetaRad(void) { return s_obs_theta_rad; }
 float FOC_GetObservedSpeedRadPerSec(void) { return s_obs_speed_rad_s; }
 float FOC_GetObservedAngleErrDeg(void) { return s_obs_angle_err_deg; }
 uint8_t FOC_IsObserverLocked(void) { return s_obs_locked; }
+float FOC_GetBusVoltageV(void) { return s_vbus_v; }
+float FOC_GetPhaseCurrentUa(void) { return s_iu_a; }
+float FOC_GetPhaseCurrentVa(void) { return s_iv_a; }
+float FOC_GetPhaseCurrentWa(void) { return s_iw_a; }
+void FOC_GetObserverInputs(float *valpha, float *vbeta, float *ialpha, float *ibeta, float *vbus)
+{
+  /* 对外返回与 observer 内核一致的 alpha/beta 输入，
+   * 避免“调试口看到的 ibeta”和“observer 实际使用的 ibeta”不一致。
+   */
+  if (valpha) *valpha = s_flux_obs.Valpha_I;
+  if (vbeta) *vbeta = s_flux_obs.Vbeta_I;
+  if (ialpha) *ialpha = s_flux_obs.Ialpha_I;
+  if (ibeta) *ibeta = s_flux_obs.Ibeta_I;
+  if (vbus) *vbus = s_vbus_v;
+}
+void FOC_GetCurrentOffsets(float *iu_offset_v, float *iv_offset_v)
+{
+  if (iu_offset_v) *iu_offset_v = s_iu_offset_v;
+  if (iv_offset_v) *iv_offset_v = s_iv_offset_v;
+}
+

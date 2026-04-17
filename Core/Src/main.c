@@ -134,13 +134,12 @@ int main(void)
     if ((HAL_GetTick() - last_dbg_tick) >= 20u)
     {
       last_dbg_tick = HAL_GetTick();
-      printf("%.3f,%.3f,%.3f,%.3f,%.3f,%u\r\n",
-             FOC_GetOpenLoopFreqHz(),
+      printf("%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
              FOC_GetOpenLoopThetaErad(),
              FOC_GetObservedThetaRad(),
-             FOC_GetObservedSpeedRadPerSec(),
              FOC_GetObservedAngleErrDeg(),
-             (unsigned)FOC_IsObserverLocked());
+             FOC_GetOpenLoopFreqHz() * FOC_POLE_PAIRS * 6.2831853071795864769f,
+             FOC_GetObservedSpeedRadPerSec());
     }
 
    
