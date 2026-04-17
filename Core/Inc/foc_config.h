@@ -52,6 +52,34 @@ extern "C" {
 #define FOC_OPENLOOP_TARGET_FREQ_HZ  (17.0f)   /* 当前调试阶段希望到达的最高机械频率。 */
 #define FOC_OPENLOOP_RAMP_TIME_MS    (2000.0f) /* 从起始频率爬到目标频率所用时间。 */
 
+/* 开环阶段控制模式。
+ * `FOC_CTRL_MODE_OPENLOOP_VF` 保留原有电压开环路径。
+ * `FOC_CTRL_MODE_OPENLOOP_CURRENT` 使用开环角度做 Park/反 Park，并启用 Id/Iq 电流 PI。
+ */
+#define FOC_CTRL_MODE_OPENLOOP_VF      (0u)      /* 原有 V/F 小电压开环。 */
+#define FOC_CTRL_MODE_OPENLOOP_CURRENT (1u)      /* 开环角度 + dq 电流闭环。 */
+#ifndef FOC_OPENLOOP_CTRL_MODE
+#define FOC_OPENLOOP_CTRL_MODE         (FOC_CTRL_MODE_OPENLOOP_VF) /* 默认保留原有可运行链路。 */
+#endif
+
+/* 电流环参数。
+ * PI 按一阶 RL 电机模型和目标 1000Hz 电流环带宽配置：
+ * - wc = 2*pi*1000 rad/s；
+ * - Kp = Ls*wc；
+ * - Ki = Rs*wc。
+ *
+ * 当前 `FOC_TS_SEC = 62.5us`，电流环采样频率约 16kHz。
+ * 1000Hz 带宽约为采样频率的 1/16，已经不是特别保守，首次切入电流环时建议先保留较小 Iq_ref 和电压限幅观察。
+ */
+#define FOC_ID_REF_A                 (0.0f)    /* d 轴电流参考，第一阶段先不给励磁电流。 */
+#define FOC_IQ_REF_A                 (0.5f)    /* q 轴电流参考，切到电流环模式后的初始转矩电流。 */
+#define FOC_ID_KP                    (3.77f)   /* d 轴电流 PI 比例增益，约等于 FOC_LS_H * 2*pi*1000。 */
+#define FOC_ID_KI                    (3330.0f) /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*1000，单位约 V/(A*s)。 */
+#define FOC_IQ_KP                    (3.77f)   /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */
+#define FOC_IQ_KI                    (3330.0f) /* q 轴电流 PI 积分增益，第一阶段按 d/q 同参数处理。 */
+#define FOC_CURR_LOOP_V_LIMIT        (4.0f)    /* 单个 PI 输出电压限幅。 */
+#define FOC_DQ_VOLT_LIMIT            (4.0f)    /* dq 电压矢量总幅值限幅。 */
+
 /* PWM 输出限幅 */
 #define FOC_SVPWM_MIN_CCR            (20u)     /* 留一点边界余量，避免比较值贴死到 0。 */
 #define FOC_SVPWM_MAX_CCR            (FOC_PWM_ARR - 20u) /* 留一点边界余量，避免比较值贴死到 ARR。 */

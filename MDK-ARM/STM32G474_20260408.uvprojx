@@ -439,6 +439,26 @@
               <FileType>1</FileType>
               <FilePath>..\Core\Src\PMSM_Control_Core\FluxObserver_PLL.c</FilePath>
             </File>
+            <File>
+              <FileName>Clarke_Park.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\PMSM_Control_Core\Clarke_Park.h</FilePath>
+            </File>
+            <File>
+              <FileName>Clarke_Park.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\PMSM_Control_Core\Clarke_Park.c</FilePath>
+            </File>
+            <File>
+              <FileName>PI_Controller.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\PMSM_Control_Core\PI_Controller.h</FilePath>
+            </File>
+            <File>
+              <FileName>PI_Controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\PMSM_Control_Core\PI_Controller.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

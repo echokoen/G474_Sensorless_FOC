@@ -82,6 +82,15 @@ float FOC_GetObservedSpeedRadPerSec(void);
 float FOC_GetObservedAngleErrDeg(void);
 uint8_t FOC_IsObserverLocked(void);
 void FOC_GetObserverInputs(float *valpha, float *vbeta, float *ialpha, float *ibeta, float *vbus);
+void FOC_GetCurrentLoopDebug(float *id_ref,
+                             float *iq_ref,
+                             float *id_meas,
+                             float *iq_meas,
+                             float *vd_cmd,
+                             float *vq_cmd,
+                             float *valpha_cmd,
+                             float *vbeta_cmd,
+                             float *theta_ctrl);
 
 #ifdef __cplusplus
 }
