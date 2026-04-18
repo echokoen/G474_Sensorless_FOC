@@ -113,7 +113,7 @@ int main(void)
     FOC_Start();
 
 
-  printf("FOC stage1 voltage open-loop ready\r\n");
+  printf("FOC switchover debug ready\r\n");
 
   /* 调试输出：低频打印开环/观测器状态，便于上位机或串口终端观察稳定性。 */
   uint32_t last_dbg_tick = HAL_GetTick();
@@ -134,29 +134,44 @@ int main(void)
     if ((HAL_GetTick() - last_dbg_tick) >= 5u)
     {
       FOC_DebugSnapshot_t dbg = {0};
+      uint8_t sw_state = 0u;
+      uint8_t observer_ready = 0u;
+      float blend_k = 0.0f;
+      float theta_open = 0.0f;
+      float theta_obs = 0.0f;
+      float theta_ctrl = 0.0f;
+      float angle_err_deg = 0.0f;
+      float open_speed_rad_s = 0.0f;
+      float obs_speed_rad_s = 0.0f;
       last_dbg_tick = HAL_GetTick();
 
-      if (FOC_GetDebugSnapshot(&dbg) != 0u)
-      {
-        printf("seq=%lu,sec=%u,ccru=%u,ccrv=%u,ccrw=%u,win1=%u,win2=%u,smp=%u,fb=%u,pair=%u,rawu=%u,rawv=%u,raww=%u,iu=%.3f,iv=%.3f,iw=%.3f,isum=%.3f\r\n",
-               (unsigned long)dbg.seq,
-               (unsigned int)dbg.sec,
-               (unsigned int)dbg.ccru,
-               (unsigned int)dbg.ccrv,
-               (unsigned int)dbg.ccrw,
-               (unsigned int)dbg.win1,
-               (unsigned int)dbg.win2,
-               (unsigned int)dbg.smp,
-               (unsigned int)dbg.fb,
-               (unsigned int)dbg.pair,
-               (unsigned int)dbg.rawu,
-               (unsigned int)dbg.rawv,
-               (unsigned int)dbg.raww,
-               dbg.iu,
-               dbg.iv,
-               dbg.iw,
-               dbg.isum);
-      }
+      (void)FOC_GetDebugSnapshot(&dbg);
+      FOC_GetSwitchOverDebug(&sw_state,
+                             &observer_ready,
+                             &blend_k,
+                             &theta_open,
+                             &theta_obs,
+                             &theta_ctrl,
+                             &angle_err_deg,
+                             &open_speed_rad_s,
+                             &obs_speed_rad_s);
+
+      printf("%u,%u,%u,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.1f,%u,%.3f,%.3f,%.3f,%.3f\r\n",
+             (unsigned int)FOC_GetState(),
+             (unsigned int)sw_state,
+             (unsigned int)observer_ready,
+             blend_k,
+             theta_open,
+             theta_obs,
+             theta_ctrl,
+             angle_err_deg,
+             open_speed_rad_s,
+             obs_speed_rad_s,
+             (unsigned int)dbg.pair,
+             dbg.iu,
+             dbg.iv,
+             dbg.iw,
+             dbg.isum);
     }
 
    

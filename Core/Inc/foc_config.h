@@ -50,7 +50,7 @@ extern "C" {
 
 /* 开环起转参数 */
 #define FOC_ALIGN_VDQ_V              (2.0f)    /* 对齐阶段给定的小幅 d 轴电压，主要用于找“初始角”。 */
-#define FOC_ALIGN_THETA_OFFSET_RAD   (1.5707963268f) /* 对齐角补偿 90°，用于 I/F 启动零点测试。 */
+#define FOC_ALIGN_THETA_OFFSET_RAD   (0.0f)    /* 对齐角补偿。当前 V/F observer 标定阶段先归零。 */
 #define FOC_OPENLOOP_VDQ_V           (4.0f)    /* 开环旋转时的电压幅值，太小带不动，太大会过流。 */
 #define FOC_OPENLOOP_START_FREQ_HZ   (0.2f)    /* 开环起步机械频率，低速起转时先保守一些。 */
 #define FOC_OPENLOOP_TARGET_FREQ_HZ  (12.0f)   /* 当前调试阶段希望到达的最高机械频率。 */
@@ -63,7 +63,7 @@ extern "C" {
 #define FOC_CTRL_MODE_OPENLOOP_VF      (0u)      /* 原有 V/F 小电压开环。 */
 #define FOC_CTRL_MODE_OPENLOOP_CURRENT (1u)      /* 开环角度 + dq 电流闭环。 */
 #ifndef FOC_OPENLOOP_CTRL_MODE
-#define FOC_OPENLOOP_CTRL_MODE         (FOC_CTRL_MODE_OPENLOOP_CURRENT) /* 启用开环角度 + dq 电流闭环。 */
+#define FOC_OPENLOOP_CTRL_MODE         (FOC_CTRL_MODE_OPENLOOP_VF) /* 回到 V/F 小电压开环，只让 observer 后台观察。 */
 #endif
 
 /* 电流环参数。
@@ -95,6 +95,21 @@ extern "C" {
 #define FOC_OBS_ENABLE_FREQ_HZ       (8.0f)    /* 机械频率太低时，不对 observer 做锁定判定。 */
 #define FOC_OBS_LOCK_ERR_DEG         (25.0f)   /* 角差在这个范围内，才认为“有机会锁住”。 */
 #define FOC_OBS_LOCK_HOLD_MS         (200u)    /* 条件持续这么久，才把状态置为 locked。 */
+#define FOC_OBS_THETA_COMP_RAD       (0.4463f) /* observer 原始角度补偿，当前由 V/F 稳态约 25.57° 角差标定。 */
+
+/* observer 接管参数。
+ *
+ * switchover 不是“一满足条件立刻切过去”，而是：
+ * - 先让 observer 在足够转速下连续稳定一段时间；
+ * - 再从开环角平滑混合到 observer 角；
+ * - 最后完全由 observer 角作为 Park / 反 Park 控制角。
+ */
+#define FOC_SWITCHOVER_ENABLE              (0u)     /* 1=允许 observer 接管控制角，0=只后台观察。 */
+#define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ    (8.0f)   /* 机械频率达到该值后，才允许进入接管判定。 */
+#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG   (30.0f)  /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
+#define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO (0.30f)  /* observer 电角速度与开环电角速度允许的相对误差。 */
+#define FOC_SWITCHOVER_HOLD_MS             (100u)   /* 接管条件连续满足这么久，才进入混合阶段。 */
+#define FOC_SWITCHOVER_BLEND_MS            (500u)   /* 从开环角平滑过渡到 observer 角所用时间。 */
 
 #ifdef __cplusplus
 }

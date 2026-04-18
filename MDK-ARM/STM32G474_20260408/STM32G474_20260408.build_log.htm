@@ -35,14 +35,17 @@ compiling stm32g4xx_it.c...
 ../Core/Src/stm32g4xx_it.c(176): warning:  #1-D: last line of file ends without a newline
   }
 ../Core/Src/stm32g4xx_it.c: 3 warnings, 0 errors
+compiling main.c...
 compiling bsp_key.c...
 compiling FluxObserver_PLL.c...
-compiling main.c...
 compiling foc_bridge.c...
+..\Core\Src\foc_bridge.c(563): warning:  #177-D: function "foc_observer_switchover_condition"  was declared but never referenced
+  static uint8_t foc_observer_switchover_condition(void)
+..\Core\Src\foc_bridge.c: 1 warning, 0 errors
 linking...
-Program Size: Code=29592 RO-data=736 RW-data=208 ZI-data=1872  
+Program Size: Code=29560 RO-data=672 RW-data=224 ZI-data=1872  
 FromELF: creating hex file...
-"STM32G474_20260408\STM32G474_20260408.axf" - 0 Error(s), 3 Warning(s).
+"STM32G474_20260408\STM32G474_20260408.axf" - 0 Error(s), 4 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -66,7 +69,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE@6.1.0
       Include file:  CMSIS/Core/Include/tz_context.h
-Build Time Elapsed:  00:00:04
+Build Time Elapsed:  00:00:05
 </pre>
 </body>
 </html>

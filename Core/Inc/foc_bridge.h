@@ -135,6 +135,15 @@ void FOC_GetCurrentLoopDebug(float *id_ref,
                              float *valpha_cmd,
                              float *vbeta_cmd,
                              float *theta_ctrl);
+void FOC_GetSwitchOverDebug(uint8_t *sw_state,
+                            uint8_t *observer_ready,
+                            float *blend_k,
+                            float *theta_open,
+                            float *theta_obs,
+                            float *theta_ctrl,
+                            float *angle_err_deg,
+                            float *open_speed_rad_s,
+                            float *obs_speed_rad_s);
 
 #ifdef __cplusplus
 }
