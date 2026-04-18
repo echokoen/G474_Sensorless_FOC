@@ -133,32 +133,39 @@ int main(void)
 
     if ((HAL_GetTick() - last_dbg_tick) >= 20u)
     {
-      const float obs_phase_comp_rad = 0.92f;
-      float theta_obs_comp = FOC_GetObservedThetaRad() + obs_phase_comp_rad;
-      while (theta_obs_comp >= 6.2831853071795864769f)
-      {
-        theta_obs_comp -= 6.2831853071795864769f;
-      }
-      while (theta_obs_comp < 0.0f)
-      {
-        theta_obs_comp += 6.2831853071795864769f;
-      }
-      float comp_err_rad = FOC_GetOpenLoopThetaErad() - theta_obs_comp;
-      while (comp_err_rad > 3.14159265358979323846f)
-      {
-        comp_err_rad -= 6.2831853071795864769f;
-      }
-      while (comp_err_rad < -3.14159265358979323846f)
-      {
-        comp_err_rad += 6.2831853071795864769f;
-      }
       last_dbg_tick = HAL_GetTick();
-      printf("%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
-             FOC_GetOpenLoopThetaErad(),
-             theta_obs_comp,
-             comp_err_rad * 57.29577951308232f,
-             FOC_GetOpenLoopFreqHz() * FOC_POLE_PAIRS * 6.2831853071795864769f,
-             FOC_GetObservedSpeedRadPerSec());
+      uint16_t adc1_j1 = 0u;
+      uint16_t adc1_j2 = 0u;
+      uint16_t adc2_j1 = 0u;
+      uint16_t adc2_j2 = 0u;
+      uint16_t adc2_j3 = 0u;
+      uint8_t sector = 0u;
+      float duty_u = 0.0f;
+      float duty_v = 0.0f;
+      float duty_w = 0.0f;
+      const float iu = FOC_GetPhaseCurrentUa();
+      const float iv = FOC_GetPhaseCurrentVa();
+      const float iw = FOC_GetPhaseCurrentWa();
+
+      FOC_GetInjectedRawAdcDebug(&adc1_j1, &adc1_j2, &adc2_j1, &adc2_j2, &adc2_j3);
+      FOC_GetSvpwmDebug(&sector, &duty_u, &duty_v, &duty_w);
+
+      printf("%u,%u,%.3f,%.3f,%.3f,%.3f,%u,%u,%u,%u,%u,%.3f,%.3f,%.3f,%.3f\r\n",
+             (unsigned int)FOC_GetState(),
+             (unsigned int)sector,
+             duty_u,
+             duty_v,
+             duty_w,
+             FOC_GetBusVoltageV(),
+             (unsigned int)adc1_j1,
+             (unsigned int)adc1_j2,
+             (unsigned int)adc2_j1,
+             (unsigned int)adc2_j2,
+             (unsigned int)adc2_j3,
+             iu,
+             iv,
+             iw,
+             iu + iv + iw);
     }
 
    

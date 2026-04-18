@@ -56,6 +56,14 @@ float FOC_GetPhaseCurrentUa(void);
 float FOC_GetPhaseCurrentVa(void);
 float FOC_GetPhaseCurrentWa(void);
 void FOC_GetCurrentOffsets(float *iu_offset_v, float *iv_offset_v);
+void FOC_GetCurrentOffsets3(float *iu_offset_v, float *iv_offset_v, float *iw_offset_v);
+void FOC_GetCurrentRawAdc(uint16_t *raw_u, uint16_t *raw_v, uint16_t *raw_w);
+void FOC_GetInjectedRawAdcDebug(uint16_t *adc1_rank1,
+                                uint16_t *adc1_rank2,
+                                uint16_t *adc2_rank1,
+                                uint16_t *adc2_rank2,
+                                uint16_t *adc2_rank3);
+void FOC_GetSvpwmDebug(uint8_t *sector, float *duty_u, float *duty_v, float *duty_w);
 
 /* 第一阶段核心步骤拆分。
  *
