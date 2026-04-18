@@ -39,8 +39,8 @@ extern "C" {
 #define FOC_ADC_FULL_SCALE           (4096.0f)  /* 12 位 ADC 换算分母，按正点原子例程使用 4096。 */
 #define FOC_ADC_VREF                 (3.3f)    /* ADC 基准电压，单位伏。 */
 #define FOC_CURRENT_OFFSET_CALIB_SAMPLES (4096u) /* 电流偏置校准采样数，样本越多越稳但启动越慢。 */
-#define FOC_ADC_TRIG_MARGIN_CCR      (120u)    /* 动态采样窗口两侧预留边界，避开死区与开关沿恢复时间。 */
-#define FOC_ADC_TRIG_MIN_WINDOW_CCR  (320u)    /* 只有窗口宽度大于该值，才允许把采样点放进窗口内部。 */
+#define FOC_ADC_TRIG_MARGIN_CCR      (140u)    /* 动态采样窗口两侧预留边界，先适度放松以减少 fallback 频率，同时继续避开主要开关沿干扰。 */
+#define FOC_ADC_TRIG_MIN_WINDOW_CCR  (320u)    /* 只有窗口宽度足够大时才允许把采样点放进去，当前回到更均衡的阈值。 */
 #define FOC_ADC_TRIG_FALLBACK_CCR    (FOC_PWM_HALF_ARR) /* 没有足够宽窗口时回退到保守采样点。 */
 
 /* 保护阈值 */
@@ -53,8 +53,8 @@ extern "C" {
 #define FOC_ALIGN_THETA_OFFSET_RAD   (0.0f)    /* 对齐角补偿。当前 V/F observer 标定阶段先归零。 */
 #define FOC_OPENLOOP_VDQ_V           (4.0f)    /* 开环旋转时的电压幅值，太小带不动，太大会过流。 */
 #define FOC_OPENLOOP_START_FREQ_HZ   (0.2f)    /* 开环起步机械频率，低速起转时先保守一些。 */
-#define FOC_OPENLOOP_TARGET_FREQ_HZ  (12.0f)   /* 当前调试阶段希望到达的最高机械频率。 */
-#define FOC_OPENLOOP_RAMP_TIME_MS    (4000.0f) /* 从起始频率爬到目标频率所用时间。 */
+#define FOC_OPENLOOP_TARGET_FREQ_HZ  (2.0f)    /* I/F 低速调试目标机械频率，先压低速度验证能否稳定跟随。 */
+#define FOC_OPENLOOP_RAMP_TIME_MS    (6000.0f) /* 低速测试阶段放慢爬坡，方便观察 id/iq 方向。 */
 
 /* 开环阶段控制模式。
  * `FOC_CTRL_MODE_OPENLOOP_VF` 保留原有电压开环路径。
@@ -62,27 +62,32 @@ extern "C" {
  */
 #define FOC_CTRL_MODE_OPENLOOP_VF      (0u)      /* 原有 V/F 小电压开环。 */
 #define FOC_CTRL_MODE_OPENLOOP_CURRENT (1u)      /* 开环角度 + dq 电流闭环。 */
+#define FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST (2u) /* 开环角度 + 固定 dq 电压注入，用于验证坐标方向。 */
 #ifndef FOC_OPENLOOP_CTRL_MODE
-#define FOC_OPENLOOP_CTRL_MODE         (FOC_CTRL_MODE_OPENLOOP_VF) /* 回到 V/F 小电压开环，只让 observer 后台观察。 */
+#define FOC_OPENLOOP_CTRL_MODE         (FOC_CTRL_MODE_OPENLOOP_CURRENT) /* 回到开环角度 + dq 电流闭环，observer 仍只后台观察。 */
 #endif
 
 /* 电流环参数。
- * PI 按一阶 RL 电机模型和目标 800Hz 电流环带宽配置：
- * - wc = 2*pi*800 rad/s；
+ * PI 按一阶 RL 电机模型和目标 500Hz 电流环带宽配置：
+ * - wc = 2*pi*500 rad/s；
  * - Kp = Ls*wc；
  * - Ki = Rs*wc。
  *
  * 当前 `FOC_TS_SEC = 62.5us`，电流环采样频率约 16kHz。
- * 800Hz 带宽约为采样频率的 1/20，当前用于 I/F 启动调试。
+ * 当前 d/q 极性已修正，先提升到 500Hz 观察 I/F 平顺性。
  */
 #define FOC_ID_REF_A                 (0.0f)    /* d 轴电流参考，第一阶段先不给励磁电流。 */
-#define FOC_IQ_REF_A                 (0.4f)    /* q 轴电流参考，切到电流环模式后的初始转矩电流。 */
-#define FOC_ID_KP                    (3.016f)  /* d 轴电流 PI 比例增益，约等于 FOC_LS_H * 2*pi*800。 */
-#define FOC_ID_KI                    (2664.0f) /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*800，单位约 V/(A*s)。 */
-#define FOC_IQ_KP                    (3.016f)  /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */
-#define FOC_IQ_KI                    (2664.0f) /* q 轴电流 PI 积分增益，第一阶段按 d/q 同参数处理。 */
+#define FOC_IQ_REF_A                 (0.5f)    /* q 轴电流参考，增加低速开环跟随转矩。 */
+#define FOC_ID_KP                    (1.885f)  /* d 轴电流 PI 比例增益，约等于 FOC_LS_H * 2*pi*500。 */
+#define FOC_ID_KI                    (1665.0f) /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*500，单位约 V/(A*s)。 */
+#define FOC_IQ_KP                    (1.885f)  /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */
+#define FOC_IQ_KI                    (1665.0f) /* q 轴电流 PI 积分增益，第一阶段按 d/q 同参数处理。 */
 #define FOC_CURR_LOOP_V_LIMIT        (4.0f)    /* 单个 PI 输出电压限幅。 */
 #define FOC_DQ_VOLT_LIMIT            (4.0f)    /* dq 电压矢量总幅值限幅。 */
+#define FOC_VD_CMD_SIGN              (-1.0f)   /* d 轴电压输出极性，实测 +Vd 得到 -Id，因此这里取反。 */
+#define FOC_VQ_CMD_SIGN              (-1.0f)   /* q 轴电压输出极性，实测 +Vq 得到 -Iq，因此这里取反。 */
+#define FOC_DQ_TEST_VD_V             (1.5f)    /* dq 电压注入测试的 d 轴电压，当前验证 d 轴极性。 */
+#define FOC_DQ_TEST_VQ_V             (0.0f)    /* dq 电压注入测试的 q 轴电压。 */
 
 /* PWM 输出限幅 */
 #define FOC_SVPWM_MIN_CCR            (20u)     /* 留一点边界余量，避免比较值贴死到 0。 */

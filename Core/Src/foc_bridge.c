@@ -39,6 +39,7 @@ static volatile uint16_t s_adc2_j1_raw = 0u;                         /* ADC2 注
 static volatile uint16_t s_adc2_j2_raw = 0u;                         /* ADC2 注入 Rank2 原始值，用于采样链路诊断。 */
 static volatile uint16_t s_adc2_j3_raw = 0u;                         /* ADC2 注入 Rank3 原始值，用于采样链路诊断。 */
 static volatile uint8_t s_svpwm_sector = 1u;                         /* 当前 SVPWM 电压矢量所在扇区，范围 1~6。 */
+static volatile uint8_t s_sample_sector = 1u;                        /* 当前这一次 ADC 采样 / 电流重构实际使用的扇区。 */
 static volatile float s_svpwm_da = 0.5f;                             /* U 相占空比调试缓存。 */
 static volatile float s_svpwm_db = 0.5f;                             /* V 相占空比调试缓存。 */
 static volatile float s_svpwm_dc = 0.5f;                             /* W 相占空比调试缓存。 */
@@ -146,7 +147,7 @@ static void foc_dbg_snapshot_update(void)
   const uint32_t next_seq = s_dbg_snapshot.seq + 1u;
   s_dbg_snapshot.seq = next_seq;
 
-  s_dbg_snapshot.sec = s_svpwm_sector;
+  s_dbg_snapshot.sec = s_sample_sector;
   s_dbg_snapshot.pair = s_trusted_current_pair;
   s_dbg_snapshot.fb = s_adc_trigger_fallback;
   s_dbg_snapshot.ccru = s_ccr_u;
@@ -193,88 +194,55 @@ static inline uint16_t foc_clamp_trigger_ccr(int32_t ccr)
 
 static void foc_update_adc_trigger_ccr(uint16_t ccr_u, uint16_t ccr_v, uint16_t ccr_w)
 {
-  uint16_t ccr_min = ccr_u;
-  uint16_t ccr_mid = ccr_v;
-  uint16_t ccr_max = ccr_w;
+  uint16_t ccr_x = ccr_u;
+  uint16_t ccr_y = ccr_v;
+  const uint16_t center = FOC_PWM_HALF_ARR;
+  uint16_t sample_ccr = center;
 
-  if (ccr_min > ccr_mid)
+  /* 当前阶段改为固定中点采样。
+   *
+   * 原来的动态采样点逻辑更适合中高速、占空比变化较大时用来追窗口；
+   * 但现在是很低速的 I/F 启动，PWM 占空比本来就小，频繁挪动采样点反而会
+   * 把采样误差放大成“看起来像电流在抖”的假象。
+   *
+   * 所以这里不再根据边沿去追动态窗口，直接锁定 TIM1 中点采样。
+   * 这样至少能保证：
+   * - 采样时序固定；
+   * - 便于先把电流偏置、扇区重构和电流环方向看清楚；
+   * - 采样误差不会再被窗口追踪策略额外引入。
+   */
+  switch (s_svpwm_sector)
   {
-    uint16_t tmp = ccr_min;
-    ccr_min = ccr_mid;
-    ccr_mid = tmp;
+    case 1u:
+    case 6u:
+      ccr_x = ccr_v; /* 可信相 V */
+      ccr_y = ccr_w; /* 可信相 W */
+      break;
+
+    case 2u:
+    case 3u:
+      ccr_x = ccr_u; /* 可信相 U */
+      ccr_y = ccr_w; /* 可信相 W */
+      break;
+
+    case 4u:
+    case 5u:
+    default:
+      ccr_x = ccr_u; /* 可信相 U */
+      ccr_y = ccr_v; /* 可信相 V */
+      break;
   }
-  if (ccr_mid > ccr_max)
-  {
-    uint16_t tmp = ccr_mid;
-    ccr_mid = ccr_max;
-    ccr_max = tmp;
-  }
-  if (ccr_min > ccr_mid)
-  {
-    uint16_t tmp = ccr_min;
-    ccr_min = ccr_mid;
-    ccr_mid = tmp;
-  }
 
-  s_adc_win1_ccr = (uint16_t)(ccr_mid - ccr_min);
-  s_adc_win2_ccr = (uint16_t)(ccr_max - ccr_mid);
-
-  uint16_t sample_ccr = s_adc_sample_ccr;
-  uint8_t used_fallback = 0u;
-
-  const uint16_t margin = FOC_ADC_TRIG_MARGIN_CCR;
-  const uint16_t min_window = FOC_ADC_TRIG_MIN_WINDOW_CCR;
-  const uint16_t window1_valid = (s_adc_win1_ccr > (uint16_t)(min_window + (2u * margin))) ? 1u : 0u;
-  const uint16_t window2_valid = (s_adc_win2_ccr > (uint16_t)(min_window + (2u * margin))) ? 1u : 0u;
-
-  if (window1_valid || window2_valid)
-  {
-    uint16_t start = 0u;
-    uint16_t end = 0u;
-
-    if (window1_valid && window2_valid)
-    {
-      if (s_adc_win2_ccr >= s_adc_win1_ccr)
-      {
-        start = (uint16_t)(ccr_mid + margin);
-        end = (uint16_t)(ccr_max - margin);
-      }
-      else
-      {
-        start = (uint16_t)(ccr_min + margin);
-        end = (uint16_t)(ccr_mid - margin);
-      }
-    }
-    else if (window1_valid)
-    {
-      start = (uint16_t)(ccr_min + margin);
-      end = (uint16_t)(ccr_mid - margin);
-    }
-    else
-    {
-      start = (uint16_t)(ccr_mid + margin);
-      end = (uint16_t)(ccr_max - margin);
-    }
-
-    if (end > start)
-    {
-      sample_ccr = (uint16_t)(start + ((end - start) >> 1));
-    }
-    else
-    {
-      sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR;
-      used_fallback = 1u;
-    }
-  }
-  else
-  {
-    sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR;
-    used_fallback = 1u;
-  }
+  /* 这两个调试窗口保留为“中心点到两条可信边沿”的距离，
+   * 方便后面评估：如果以后重新打开动态采样，当前窗口本来有多宽。
+   */
+  s_adc_win1_ccr = (ccr_x >= center) ? (uint16_t)(ccr_x - center) : (uint16_t)(center - ccr_x);
+  s_adc_win2_ccr = (ccr_y >= center) ? (uint16_t)(ccr_y - center) : (uint16_t)(center - ccr_y);
 
   sample_ccr = foc_clamp_trigger_ccr((int32_t)sample_ccr);
   s_adc_sample_ccr = sample_ccr;
-  s_adc_trigger_fallback = used_fallback;
+  s_adc_trigger_fallback = 0u;
+  s_midpoint_sampling = 1u;
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, sample_ccr);
 }
 
@@ -333,7 +301,7 @@ static inline uint16_t foc_clamp_ccr(int32_t ccr)
   return (uint16_t)ccr;
 }
 
-#if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
+#if ((FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT) || (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST))
 static void foc_limit_vector(float *x, float *y, float limit)
 {
   if ((x == 0) || (y == 0) || (limit <= 0.0f))
@@ -425,13 +393,19 @@ static void foc_update_currents(void)
   const float iv_adc = foc_current_from_adc(vv, s_iv_offset_v, FOC_CURR_SIGN_V);
   const float iw_adc = foc_current_from_adc(vw, s_iw_offset_v, FOC_CURR_SIGN_W);
 
+  /* 当前这一拍的采样扇区，需要在进入扇区表前单独锁存。
+   * 这样调试快照里的 sec 就和本拍 current reconstruction 使用的 pair 完全一致，
+   * 不会再和后面 SVPWM 刷新的下一拍扇区混在一起。
+   */
+  s_sample_sector = s_svpwm_sector;
+
   /* 三电阻低侧采样不能固定相信任三路 ADC。
    * 这里按 MCSDK R3_2 的扇区表选择两相，第三相用 Ia+Ib+Ic=0 重构：
    * - S1/S6: 采 V/W，重构 U；
    * - S2/S3: 采 U/W，重构 V；
    * - S4/S5: 采 U/V，重构 W。
    */
-  switch (s_svpwm_sector)
+  switch (s_sample_sector)
   {
     case 1u:
     case 6u:
@@ -719,8 +693,32 @@ static void foc_openloop_current_command(float theta_rad, float *valpha, float *
 
   s_id_ref_a = FOC_ID_REF_A;
   s_iq_ref_a = FOC_IQ_REF_A;
-  vdq.d = PIController_Run(&s_id_pi, s_id_ref_a, idq.d, FOC_TS_SEC);
-  vdq.q = PIController_Run(&s_iq_pi, s_iq_ref_a, idq.q, FOC_TS_SEC);
+  vdq.d = FOC_VD_CMD_SIGN * PIController_Run(&s_id_pi, s_id_ref_a, idq.d, FOC_TS_SEC);
+  vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&s_iq_pi, s_iq_ref_a, idq.q, FOC_TS_SEC);
+  foc_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
+
+  ClarkePark_InvPark(&vdq, theta_rad, &vab);
+  s_vd_cmd_v = vdq.d;
+  s_vq_cmd_v = vdq.q;
+  s_valpha_cmd_v = vab.alpha;
+  s_vbeta_cmd_v = vab.beta;
+
+  if (valpha != 0) *valpha = s_valpha_cmd_v;
+  if (vbeta != 0) *vbeta = s_vbeta_cmd_v;
+}
+#endif
+
+#if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
+static void foc_openloop_dq_volt_test_command(float theta_rad, float *valpha, float *vbeta)
+{
+  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
+  ClarkePark_DQ_t idq = {0.0f, 0.0f};
+  ClarkePark_DQ_t vdq = {FOC_DQ_TEST_VD_V, FOC_DQ_TEST_VQ_V};
+
+  foc_update_dq_measurement(theta_rad, 0, &idq);
+
+  s_id_ref_a = 0.0f;
+  s_iq_ref_a = 0.0f;
   foc_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
 
   ClarkePark_InvPark(&vdq, theta_rad, &vab);
@@ -842,6 +840,7 @@ void FOC_BridgeInit(void)
   s_adc_win2_ccr = 0u;
   s_adc_sample_ccr = foc_clamp_trigger_ccr((int32_t)FOC_ADC_TRIG_FALLBACK_CCR);
   s_adc_trigger_fallback = 1u;
+  s_sample_sector = 1u;
   s_trusted_current_pair = 0u;
   s_offset_samples = 0u;
   s_offset_sum_u = 0.0f;
@@ -1043,6 +1042,8 @@ void FOC_OpenLoopRun(void)
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
   foc_openloop_current_command(theta_ctrl, &valpha, &vbeta); /* I/F 阶段先用开环角，接管后用 observer 角。 */
+#elif (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
+  foc_openloop_dq_volt_test_command(theta_ctrl, &valpha, &vbeta); /* 固定 dq 电压注入，用于验证坐标方向。 */
 #else
   foc_openloop_vf_command(theta_ctrl, &valpha, &vbeta); /* 原有开环电压路径也复用同一套角度接管逻辑。 */
 #endif
@@ -1163,7 +1164,7 @@ void FOC_GetInjectedRawAdcDebug(uint16_t *adc1_rank1,
 
 void FOC_GetSvpwmDebug(uint8_t *sector, float *duty_u, float *duty_v, float *duty_w)
 {
-  if (sector) *sector = s_svpwm_sector;
+  if (sector) *sector = s_sample_sector;
   if (duty_u) *duty_u = s_svpwm_da;
   if (duty_v) *duty_v = s_svpwm_db;
   if (duty_w) *duty_w = s_svpwm_dc;
