@@ -39,6 +39,9 @@ extern "C" {
 #define FOC_ADC_FULL_SCALE           (4096.0f)  /* 12 位 ADC 换算分母，按正点原子例程使用 4096。 */
 #define FOC_ADC_VREF                 (3.3f)    /* ADC 基准电压，单位伏。 */
 #define FOC_CURRENT_OFFSET_CALIB_SAMPLES (4096u) /* 电流偏置校准采样数，样本越多越稳但启动越慢。 */
+#define FOC_ADC_TRIG_MARGIN_CCR      (120u)    /* 动态采样窗口两侧预留边界，避开死区与开关沿恢复时间。 */
+#define FOC_ADC_TRIG_MIN_WINDOW_CCR  (320u)    /* 只有窗口宽度大于该值，才允许把采样点放进窗口内部。 */
+#define FOC_ADC_TRIG_FALLBACK_CCR    (FOC_PWM_HALF_ARR) /* 没有足够宽窗口时回退到保守采样点。 */
 
 /* 保护阈值 */
 #define FOC_CURRENT_LIMIT_A          (15.0f)   /* 单相电流限值，触发后直接进入故障态。 */
@@ -50,8 +53,8 @@ extern "C" {
 #define FOC_ALIGN_THETA_OFFSET_RAD   (1.5707963268f) /* 对齐角补偿 90°，用于 I/F 启动零点测试。 */
 #define FOC_OPENLOOP_VDQ_V           (4.0f)    /* 开环旋转时的电压幅值，太小带不动，太大会过流。 */
 #define FOC_OPENLOOP_START_FREQ_HZ   (0.2f)    /* 开环起步机械频率，低速起转时先保守一些。 */
-#define FOC_OPENLOOP_TARGET_FREQ_HZ  (5.0f)   /* 当前调试阶段希望到达的最高机械频率。 */
-#define FOC_OPENLOOP_RAMP_TIME_MS    (6000.0f) /* 从起始频率爬到目标频率所用时间。 */
+#define FOC_OPENLOOP_TARGET_FREQ_HZ  (12.0f)   /* 当前调试阶段希望到达的最高机械频率。 */
+#define FOC_OPENLOOP_RAMP_TIME_MS    (4000.0f) /* 从起始频率爬到目标频率所用时间。 */
 
 /* 开环阶段控制模式。
  * `FOC_CTRL_MODE_OPENLOOP_VF` 保留原有电压开环路径。
@@ -73,7 +76,7 @@ extern "C" {
  * 800Hz 带宽约为采样频率的 1/20，当前用于 I/F 启动调试。
  */
 #define FOC_ID_REF_A                 (0.0f)    /* d 轴电流参考，第一阶段先不给励磁电流。 */
-#define FOC_IQ_REF_A                 (0.5f)    /* q 轴电流参考，切到电流环模式后的初始转矩电流。 */
+#define FOC_IQ_REF_A                 (0.4f)    /* q 轴电流参考，切到电流环模式后的初始转矩电流。 */
 #define FOC_ID_KP                    (3.016f)  /* d 轴电流 PI 比例增益，约等于 FOC_LS_H * 2*pi*800。 */
 #define FOC_ID_KI                    (2664.0f) /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*800，单位约 V/(A*s)。 */
 #define FOC_IQ_KP                    (3.016f)  /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */

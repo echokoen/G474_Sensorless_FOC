@@ -42,6 +42,14 @@ static volatile uint8_t s_svpwm_sector = 1u;                         /* 当前 S
 static volatile float s_svpwm_da = 0.5f;                             /* U 相占空比调试缓存。 */
 static volatile float s_svpwm_db = 0.5f;                             /* V 相占空比调试缓存。 */
 static volatile float s_svpwm_dc = 0.5f;                             /* W 相占空比调试缓存。 */
+static volatile uint16_t s_ccr_u = FOC_PWM_HALF_ARR;                 /* U 相当前比较值。 */
+static volatile uint16_t s_ccr_v = FOC_PWM_HALF_ARR;                 /* V 相当前比较值。 */
+static volatile uint16_t s_ccr_w = FOC_PWM_HALF_ARR;                 /* W 相当前比较值。 */
+static volatile uint16_t s_adc_win1_ccr = 0u;                        /* 排序后前半窗口宽度。 */
+static volatile uint16_t s_adc_win2_ccr = 0u;                        /* 排序后后半窗口宽度。 */
+static volatile uint16_t s_adc_sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR; /* 当前动态采样点 CCR4。 */
+static volatile uint8_t s_adc_trigger_fallback = 1u;                 /* 当前采样点是否退回保守位置。 */
+static volatile uint8_t s_trusted_current_pair = 0u;                 /* 当前扇区选中的可信两相组合。 */
 static volatile uint8_t s_midpoint_sampling = 1u;                    /* 当前是否可使用 PWM 中间点采样。 */
 static volatile uint32_t s_offset_samples = 0u;                      /* 当前已经用于偏置平均的样本数。 */
 static volatile float s_offset_sum_u = 0.0f;                         /* U 相偏置累加和。 */
@@ -75,6 +83,7 @@ static volatile float s_vq_cmd_v = 0.0f;
 static volatile float s_valpha_cmd_v = 0.0f;
 static volatile float s_vbeta_cmd_v = 0.0f;
 static volatile float s_theta_ctrl_rad = 0.0f;
+static volatile FOC_DebugSnapshot_t s_dbg_snapshot = {0};            /* 高频路径锁存的原子调试快照。 */
 
 static inline float foc_adc_to_voltage(uint16_t raw)
 {
@@ -110,6 +119,37 @@ static inline void foc_cache_injected_raw_debug(uint16_t adc2_j1, uint16_t adc2_
   s_adc2_j3_raw = adc2_j3;
 }
 
+static void foc_dbg_snapshot_update(void)
+{
+  /* 使用轻量级 seqlock 思路锁存一整拍调试数据：
+   * - 先把 seq 改成“写入中”；
+   * - 再一次性写完所有字段；
+   * - 最后把 seq 改成新的偶数稳定值。
+   * 主循环读取时只接受前后 seq 相等且为偶数的快照。
+   */
+  const uint32_t next_seq = s_dbg_snapshot.seq + 1u;
+  s_dbg_snapshot.seq = next_seq;
+
+  s_dbg_snapshot.sec = s_svpwm_sector;
+  s_dbg_snapshot.pair = s_trusted_current_pair;
+  s_dbg_snapshot.fb = s_adc_trigger_fallback;
+  s_dbg_snapshot.ccru = s_ccr_u;
+  s_dbg_snapshot.ccrv = s_ccr_v;
+  s_dbg_snapshot.ccrw = s_ccr_w;
+  s_dbg_snapshot.win1 = s_adc_win1_ccr;
+  s_dbg_snapshot.win2 = s_adc_win2_ccr;
+  s_dbg_snapshot.smp = s_adc_sample_ccr;
+  s_dbg_snapshot.rawu = s_raw_u;
+  s_dbg_snapshot.rawv = s_raw_v;
+  s_dbg_snapshot.raww = s_raw_w;
+  s_dbg_snapshot.iu = s_iu_a;
+  s_dbg_snapshot.iv = s_iv_a;
+  s_dbg_snapshot.iw = s_iw_a;
+  s_dbg_snapshot.isum = s_iu_a + s_iv_a + s_iw_a;
+
+  s_dbg_snapshot.seq = next_seq + 1u;
+}
+
 static uint8_t foc_voltage_sector(float valpha, float vbeta)
 {
   const float two_pi = 6.2831853071795864769f;
@@ -126,6 +166,100 @@ static uint8_t foc_voltage_sector(float valpha, float vbeta)
     sector = 6u;
   }
   return sector;
+}
+
+static inline uint16_t foc_clamp_trigger_ccr(int32_t ccr)
+{
+  if (ccr < (int32_t)FOC_SVPWM_MIN_CCR) return FOC_SVPWM_MIN_CCR;
+  if (ccr > (int32_t)FOC_SVPWM_MAX_CCR) return FOC_SVPWM_MAX_CCR;
+  return (uint16_t)ccr;
+}
+
+static void foc_update_adc_trigger_ccr(uint16_t ccr_u, uint16_t ccr_v, uint16_t ccr_w)
+{
+  uint16_t ccr_min = ccr_u;
+  uint16_t ccr_mid = ccr_v;
+  uint16_t ccr_max = ccr_w;
+
+  if (ccr_min > ccr_mid)
+  {
+    uint16_t tmp = ccr_min;
+    ccr_min = ccr_mid;
+    ccr_mid = tmp;
+  }
+  if (ccr_mid > ccr_max)
+  {
+    uint16_t tmp = ccr_mid;
+    ccr_mid = ccr_max;
+    ccr_max = tmp;
+  }
+  if (ccr_min > ccr_mid)
+  {
+    uint16_t tmp = ccr_min;
+    ccr_min = ccr_mid;
+    ccr_mid = tmp;
+  }
+
+  s_adc_win1_ccr = (uint16_t)(ccr_mid - ccr_min);
+  s_adc_win2_ccr = (uint16_t)(ccr_max - ccr_mid);
+
+  uint16_t sample_ccr = s_adc_sample_ccr;
+  uint8_t used_fallback = 0u;
+
+  const uint16_t margin = FOC_ADC_TRIG_MARGIN_CCR;
+  const uint16_t min_window = FOC_ADC_TRIG_MIN_WINDOW_CCR;
+  const uint16_t window1_valid = (s_adc_win1_ccr > (uint16_t)(min_window + (2u * margin))) ? 1u : 0u;
+  const uint16_t window2_valid = (s_adc_win2_ccr > (uint16_t)(min_window + (2u * margin))) ? 1u : 0u;
+
+  if (window1_valid || window2_valid)
+  {
+    uint16_t start = 0u;
+    uint16_t end = 0u;
+
+    if (window1_valid && window2_valid)
+    {
+      if (s_adc_win2_ccr >= s_adc_win1_ccr)
+      {
+        start = (uint16_t)(ccr_mid + margin);
+        end = (uint16_t)(ccr_max - margin);
+      }
+      else
+      {
+        start = (uint16_t)(ccr_min + margin);
+        end = (uint16_t)(ccr_mid - margin);
+      }
+    }
+    else if (window1_valid)
+    {
+      start = (uint16_t)(ccr_min + margin);
+      end = (uint16_t)(ccr_mid - margin);
+    }
+    else
+    {
+      start = (uint16_t)(ccr_mid + margin);
+      end = (uint16_t)(ccr_max - margin);
+    }
+
+    if (end > start)
+    {
+      sample_ccr = (uint16_t)(start + ((end - start) >> 1));
+    }
+    else
+    {
+      sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR;
+      used_fallback = 1u;
+    }
+  }
+  else
+  {
+    sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR;
+    used_fallback = 1u;
+  }
+
+  sample_ccr = foc_clamp_trigger_ccr((int32_t)sample_ccr);
+  s_adc_sample_ccr = sample_ccr;
+  s_adc_trigger_fallback = used_fallback;
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, sample_ccr);
 }
 
 /* 把角度包到 [0, 2pi)。
@@ -205,9 +339,18 @@ static void foc_limit_vector(float *x, float *y, float limit)
  */
 static void foc_set_tim1_mid(void)
 {
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, FOC_PWM_HALF_ARR);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, FOC_PWM_HALF_ARR);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, FOC_PWM_HALF_ARR);
+  s_ccr_u = FOC_PWM_HALF_ARR;
+  s_ccr_v = FOC_PWM_HALF_ARR;
+  s_ccr_w = FOC_PWM_HALF_ARR;
+  s_adc_win1_ccr = 0u;
+  s_adc_win2_ccr = 0u;
+  s_adc_sample_ccr = foc_clamp_trigger_ccr((int32_t)FOC_ADC_TRIG_FALLBACK_CCR);
+  s_adc_trigger_fallback = 1u;
+
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, s_ccr_u);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, s_ccr_v);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, s_ccr_w);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, s_adc_sample_ccr);
 }
 
 /* 控制驱动器使能脚。
@@ -270,6 +413,7 @@ static void foc_update_currents(void)
   {
     case 1u:
     case 6u:
+      s_trusted_current_pair = 1u; /* V/W 可信，重构 U。 */
       s_iv_a = iv_adc;
       s_iw_a = iw_adc;
       s_iu_a = -(s_iv_a + s_iw_a);
@@ -277,6 +421,7 @@ static void foc_update_currents(void)
 
     case 2u:
     case 3u:
+      s_trusted_current_pair = 2u; /* U/W 可信，重构 V。 */
       s_iu_a = iu_adc;
       s_iw_a = iw_adc;
       s_iv_a = -(s_iu_a + s_iw_a);
@@ -285,6 +430,7 @@ static void foc_update_currents(void)
     case 4u:
     case 5u:
     default:
+      s_trusted_current_pair = 3u; /* U/V 可信，重构 W。 */
       s_iu_a = iu_adc;
       s_iv_a = iv_adc;
       s_iw_a = -(s_iu_a + s_iv_a);
@@ -355,9 +501,14 @@ static void foc_svpwm_to_tim1(float valpha, float vbeta)
   s_svpwm_db = db;
   s_svpwm_dc = dc;
 
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, foc_clamp_ccr((int32_t)(da * (float)FOC_PWM_ARR)));
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, foc_clamp_ccr((int32_t)(db * (float)FOC_PWM_ARR)));
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, foc_clamp_ccr((int32_t)(dc * (float)FOC_PWM_ARR)));
+  s_ccr_u = foc_clamp_ccr((int32_t)(da * (float)FOC_PWM_ARR));
+  s_ccr_v = foc_clamp_ccr((int32_t)(db * (float)FOC_PWM_ARR));
+  s_ccr_w = foc_clamp_ccr((int32_t)(dc * (float)FOC_PWM_ARR));
+
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, s_ccr_u);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, s_ccr_v);
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, s_ccr_w);
+  foc_update_adc_trigger_ccr(s_ccr_u, s_ccr_v, s_ccr_w);
 }
 
 static void foc_reset_current_loop(void)
@@ -541,6 +692,14 @@ void FOC_BridgeInit(void)
   s_vbus_v = 24.0f;
   s_iu_a = s_iv_a = s_iw_a = 0.0f;
   s_raw_u = s_raw_v = s_raw_w = 0u;
+  s_ccr_u = FOC_PWM_HALF_ARR;
+  s_ccr_v = FOC_PWM_HALF_ARR;
+  s_ccr_w = FOC_PWM_HALF_ARR;
+  s_adc_win1_ccr = 0u;
+  s_adc_win2_ccr = 0u;
+  s_adc_sample_ccr = foc_clamp_trigger_ccr((int32_t)FOC_ADC_TRIG_FALLBACK_CCR);
+  s_adc_trigger_fallback = 1u;
+  s_trusted_current_pair = 0u;
   s_offset_samples = 0u;
   s_offset_sum_u = 0.0f;
   s_offset_sum_v = 0.0f;
@@ -781,6 +940,11 @@ void FOC_TaskHighFreq(void)
       foc_set_tim1_mid();
       break;
   }
+
+  /* 统一在一次高频任务末尾锁存调试快照，
+   * 保证 sec / pair / ccr / raw / iu/iv/iw 来自同一个 ADC 周期。
+   */
+  foc_dbg_snapshot_update();
 }
 
 void FOC_TaskBackground(void)
@@ -854,6 +1018,52 @@ void FOC_GetSvpwmDebug(uint8_t *sector, float *duty_u, float *duty_v, float *dut
   if (duty_u) *duty_u = s_svpwm_da;
   if (duty_v) *duty_v = s_svpwm_db;
   if (duty_w) *duty_w = s_svpwm_dc;
+}
+
+void FOC_GetSamplingWindowDebug(uint8_t *sector,
+                                uint16_t *ccr_u,
+                                uint16_t *ccr_v,
+                                uint16_t *ccr_w,
+                                uint16_t *win1,
+                                uint16_t *win2,
+                                uint16_t *sample_ccr,
+                                uint8_t *used_fallback,
+                                uint8_t *trusted_pair)
+{
+  if (sector) *sector = s_svpwm_sector;
+  if (ccr_u) *ccr_u = s_ccr_u;
+  if (ccr_v) *ccr_v = s_ccr_v;
+  if (ccr_w) *ccr_w = s_ccr_w;
+  if (win1) *win1 = s_adc_win1_ccr;
+  if (win2) *win2 = s_adc_win2_ccr;
+  if (sample_ccr) *sample_ccr = s_adc_sample_ccr;
+  if (used_fallback) *used_fallback = s_adc_trigger_fallback;
+  if (trusted_pair) *trusted_pair = s_trusted_current_pair;
+}
+
+uint8_t FOC_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot)
+{
+  if (snapshot == NULL)
+  {
+    return 0u;
+  }
+
+  for (;;)
+  {
+    const uint32_t seq1 = s_dbg_snapshot.seq;
+    if ((seq1 & 1u) != 0u)
+    {
+      continue;
+    }
+
+    *snapshot = s_dbg_snapshot;
+
+    const uint32_t seq2 = s_dbg_snapshot.seq;
+    if ((seq1 == seq2) && ((seq2 & 1u) == 0u))
+    {
+      return 1u;
+    }
+  }
 }
 
 void FOC_GetCurrentLoopDebug(float *id_ref,

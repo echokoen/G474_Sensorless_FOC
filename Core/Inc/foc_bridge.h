@@ -28,6 +28,32 @@ typedef enum
   FOC_STATE_FAULT
 } FOC_StateTypeDef;
 
+/* 调试快照。
+ *
+ * 这一份结构体表示“同一个 ADC / PWM 周期”里锁存下来的调试数据，
+ * 主循环只能打印这份快照，不能再分别读取散落的全局变量。
+ */
+typedef struct
+{
+  uint32_t seq;           /* 快照序号。使用类似 seqlock 的方式更新，稳定快照通常为偶数序号。 */
+  uint8_t sec;            /* 当前 SVPWM 扇区。 */
+  uint8_t pair;           /* 当前扇区认定的可信两相组合。1=VW, 2=UW, 3=UV。 */
+  uint8_t fb;             /* 当前采样点是否走了 fallback。0=正常窗口，1=回退点。 */
+  uint16_t ccru;          /* U 相 PWM 比较值。 */
+  uint16_t ccrv;          /* V 相 PWM 比较值。 */
+  uint16_t ccrw;          /* W 相 PWM 比较值。 */
+  uint16_t win1;          /* 排序后第一个主采样窗口宽度。 */
+  uint16_t win2;          /* 排序后第二个主采样窗口宽度。 */
+  uint16_t smp;           /* 当前锁存的 ADC 触发点 CCR4。 */
+  uint16_t rawu;          /* U 相原始 ADC 计数。 */
+  uint16_t rawv;          /* V 相原始 ADC 计数。 */
+  uint16_t raww;          /* W 相原始 ADC 计数。 */
+  float iu;               /* U 相电流，单位安。 */
+  float iv;               /* V 相电流，单位安。 */
+  float iw;               /* W 相电流，单位安。 */
+  float isum;             /* 三相电流和，理论上应接近 0。 */
+} FOC_DebugSnapshot_t;
+
 /* 生命周期控制。
  *
  * 这一组接口把“软件状态”和“硬件动作”分开：
@@ -64,6 +90,16 @@ void FOC_GetInjectedRawAdcDebug(uint16_t *adc1_rank1,
                                 uint16_t *adc2_rank2,
                                 uint16_t *adc2_rank3);
 void FOC_GetSvpwmDebug(uint8_t *sector, float *duty_u, float *duty_v, float *duty_w);
+void FOC_GetSamplingWindowDebug(uint8_t *sector,
+                                uint16_t *ccr_u,
+                                uint16_t *ccr_v,
+                                uint16_t *ccr_w,
+                                uint16_t *win1,
+                                uint16_t *win2,
+                                uint16_t *sample_ccr,
+                                uint8_t *used_fallback,
+                                uint8_t *trusted_pair);
+uint8_t FOC_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
 
 /* 第一阶段核心步骤拆分。
  *

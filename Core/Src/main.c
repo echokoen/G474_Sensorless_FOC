@@ -131,41 +131,32 @@ int main(void)
     /* USER CODE BEGIN 3 */
     FOC_TaskBackground();
 
-    if ((HAL_GetTick() - last_dbg_tick) >= 20u)
+    if ((HAL_GetTick() - last_dbg_tick) >= 5u)
     {
+      FOC_DebugSnapshot_t dbg = {0};
       last_dbg_tick = HAL_GetTick();
-      uint16_t adc1_j1 = 0u;
-      uint16_t adc1_j2 = 0u;
-      uint16_t adc2_j1 = 0u;
-      uint16_t adc2_j2 = 0u;
-      uint16_t adc2_j3 = 0u;
-      uint8_t sector = 0u;
-      float duty_u = 0.0f;
-      float duty_v = 0.0f;
-      float duty_w = 0.0f;
-      const float iu = FOC_GetPhaseCurrentUa();
-      const float iv = FOC_GetPhaseCurrentVa();
-      const float iw = FOC_GetPhaseCurrentWa();
 
-      FOC_GetInjectedRawAdcDebug(&adc1_j1, &adc1_j2, &adc2_j1, &adc2_j2, &adc2_j3);
-      FOC_GetSvpwmDebug(&sector, &duty_u, &duty_v, &duty_w);
-
-      printf("%u,%u,%.3f,%.3f,%.3f,%.3f,%u,%u,%u,%u,%u,%.3f,%.3f,%.3f,%.3f\r\n",
-             (unsigned int)FOC_GetState(),
-             (unsigned int)sector,
-             duty_u,
-             duty_v,
-             duty_w,
-             FOC_GetBusVoltageV(),
-             (unsigned int)adc1_j1,
-             (unsigned int)adc1_j2,
-             (unsigned int)adc2_j1,
-             (unsigned int)adc2_j2,
-             (unsigned int)adc2_j3,
-             iu,
-             iv,
-             iw,
-             iu + iv + iw);
+      if (FOC_GetDebugSnapshot(&dbg) != 0u)
+      {
+        printf("seq=%lu,sec=%u,ccru=%u,ccrv=%u,ccrw=%u,win1=%u,win2=%u,smp=%u,fb=%u,pair=%u,rawu=%u,rawv=%u,raww=%u,iu=%.3f,iv=%.3f,iw=%.3f,isum=%.3f\r\n",
+               (unsigned long)dbg.seq,
+               (unsigned int)dbg.sec,
+               (unsigned int)dbg.ccru,
+               (unsigned int)dbg.ccrv,
+               (unsigned int)dbg.ccrw,
+               (unsigned int)dbg.win1,
+               (unsigned int)dbg.win2,
+               (unsigned int)dbg.smp,
+               (unsigned int)dbg.fb,
+               (unsigned int)dbg.pair,
+               (unsigned int)dbg.rawu,
+               (unsigned int)dbg.rawv,
+               (unsigned int)dbg.raww,
+               dbg.iu,
+               dbg.iv,
+               dbg.iw,
+               dbg.isum);
+      }
     }
 
    
