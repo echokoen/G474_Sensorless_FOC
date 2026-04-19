@@ -2,6 +2,10 @@
 #include "foc_config.h"
 #include <math.h>
 
+/* 旧版无感观测器实现。
+ *
+ * 该实现主要服务于历史实验链路，当前主线不建议继续扩展它。
+ */
 static float wrap_2pi(float angle)
 {
   const float two_pi = 6.2831853071795864769f;
@@ -113,21 +117,17 @@ void SensorlessObserver_Update(SensorlessObserver_t *obs)
   const float flux_e = FOC_FLUX_WB;
   const float lambda = 600.0f;
   const float k = 1.0f;
-
   const float flux_r_alpha = obs->FluxAlpha - Ls * obs->Ialpha;
   const float flux_r_beta = obs->FluxBeta - Ls * obs->Ibeta;
   const float flux_err = (flux_e * flux_e) - (flux_r_alpha * flux_r_alpha) - (flux_r_beta * flux_r_beta);
-
   obs->FluxAlpha = obs->FluxAlpha + FOC_TS_SEC * (obs->Valpha - Rs * obs->Ialpha + (lambda * 0.5f) * (flux_r_alpha - k * flux_r_beta) * flux_err);
   obs->FluxBeta  = obs->FluxBeta  + FOC_TS_SEC * (obs->Vbeta  - Rs * obs->Ibeta  + (lambda * 0.5f) * (flux_r_beta + k * flux_r_alpha) * flux_err);
-
   obs->Bemf_alfa_est = flux_r_alpha;
   obs->Bemf_beta_est = flux_r_beta;
   obs->BemfMagSq = (obs->Bemf_alfa_est * obs->Bemf_alfa_est) + (obs->Bemf_beta_est * obs->Bemf_beta_est);
   obs->Ialfa_est = obs->Ialpha;
   obs->Ibeta_est = obs->Ibeta;
   obs->FluxMagSq = (obs->FluxAlpha * obs->FluxAlpha) + (obs->FluxBeta * obs->FluxBeta);
-
   {
     const float sin_t = sinf(obs->ThetaEstRad);
     const float cos_t = cosf(obs->ThetaEstRad);
@@ -143,7 +143,6 @@ void SensorlessObserver_Update(SensorlessObserver_t *obs)
   obs->hElSpeedDpp = (int16_t)(obs->SpeedEstRadPerSec * 57.2957795f);
   obs->hElAngle = (int16_t)(obs->ThetaEstRad * 57.2957795f);
   sensorless_store_rotor_speed(obs, obs->hElSpeedDpp);
-
   obs->IsSpeedReliable = (uint8_t)((fabsf(obs->AngleErrRad) < 0.35f) ? 1u : 0u);
   obs->IsBemfConsistent = (uint8_t)((obs->BemfMagSq > 1.0e-8f) ? 1u : 0u);
 

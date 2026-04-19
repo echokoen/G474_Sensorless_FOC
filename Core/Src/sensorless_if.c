@@ -1,6 +1,11 @@
 #include "sensorless_if.h"
 #include <math.h>
 
+/* 旧版无感接口封装。
+ *
+ * 当前主链路已经转向 App/Control + FluxObserver_PLL，
+ * 这里保留仅用于兼容历史实验和对照测试。
+ */
 static SensorlessObserver_t s_obs;
 static float s_last_valpha = 0.0f;
 static float s_last_vbeta = 0.0f;
@@ -47,15 +52,12 @@ void SensorlessIf_Update(float valpha, float vbeta, float ialpha, float ibeta, f
   s_obs.Ialpha = ialpha;
   s_obs.Ibeta = ibeta;
   s_obs.Vbus = vbus;
-
   s_last_valpha = valpha;
   s_last_vbeta = vbeta;
   s_last_ialpha = ialpha;
   s_last_ibeta = ibeta;
   s_last_vbus = vbus;
-
   SensorlessObserver_Update(&s_obs);
-
   s_theta_est_rad = SensorlessObserver_GetEstimatedThetaRad(&s_obs);
   s_speed_est_rad_s = SensorlessObserver_GetEstimatedSpeedRadPerSec(&s_obs);
   s_flux_alpha = s_obs.FluxAlpha;

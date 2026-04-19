@@ -5,6 +5,11 @@
 extern "C" {
 #endif
 
+/* 通用 PI 控制器。
+ *
+ * 设计目标是让电流环、速度环或后续其他控制环都能复用同一套 PI 实现。
+ */
+
 typedef struct
 {
   float kp;

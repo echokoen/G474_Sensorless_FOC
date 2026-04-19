@@ -20,7 +20,6 @@
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __BSP_USART_H__
 #define __BSP_USART_H__
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -50,6 +49,4 @@ HAL_StatusTypeDef BSP_USART1_Print(const char *str);
 #ifdef __cplusplus
 }
 #endif
-
 #endif /* __BSP_USART_H__ */
-

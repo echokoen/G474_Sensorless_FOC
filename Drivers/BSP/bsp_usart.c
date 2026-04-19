@@ -34,7 +34,6 @@ DMA_HandleTypeDef hdma_usart1_tx;
 
 void MX_USART1_UART_Init(void)
 {
-
   /* USER CODE BEGIN USART1_Init 0 */
 
   /* USER CODE END USART1_Init 0 */
@@ -72,12 +71,10 @@ void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
 }
 
 void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 {
-
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
   if(uartHandle->Instance==USART1)
@@ -97,7 +94,6 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 
     /* USART1 clock enable */
     __HAL_RCC_USART1_CLK_ENABLE();
-
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**USART1 GPIO Configuration
     PB6     ------> USART1_TX
@@ -156,7 +152,6 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 
 void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 {
-
   if(uartHandle->Instance==USART1)
   {
   /* USER CODE BEGIN USART1_MspDeInit 0 */
@@ -208,7 +203,6 @@ HAL_StatusTypeDef BSP_USART1_Print(const char *str)
 int __io_putchar(int ch)
 {
   uint8_t c = (uint8_t)ch;
-
   (void)HAL_UART_Transmit(&huart1, &c, 1U, HAL_MAX_DELAY);
   return ch;
 }

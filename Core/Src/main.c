@@ -26,8 +26,8 @@
 #include "bsp_tim.h"
 #include "bsp_usart.h"
 #include "bsp_gpio.h"
-#include "foc_bridge.h"
-
+#include "app_debug.h"
+#include "app_foc.h"
 #include "stdio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -77,7 +77,6 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -99,24 +98,19 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    MX_DMA_Init();
-    MX_USART1_UART_Init();
-    MX_ADC1_Init();
-    MX_ADC2_Init();
-    MX_TIM1_Init();
-    MX_CORDIC_Init();
-    MX_DAC1_Init();
-    MX_DAC2_Init();
-    BSP_KEY_Init();
-    FOC_BridgeInit();
-    FOC_Start();
-
-
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_USART1_UART_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_TIM1_Init();
+  MX_CORDIC_Init();
+  MX_DAC1_Init();
+  MX_DAC2_Init();
+  BSP_KEY_Init();
+  AppFoc_Init();
+  AppFoc_Start();
   printf("FOC switchover debug ready\r\n");
-
-  /* 调试输出：低频打印开环/观测器状态，便于上位机或串口终端观察稳定性。 */
-  uint32_t last_dbg_tick = HAL_GetTick();
 
   /* USER CODE END 2 */
 
@@ -124,43 +118,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    FOC_TaskBackground();
-
-    if ((HAL_GetTick() - last_dbg_tick) >= 5u)
-    {
-      FOC_DebugSnapshot_t dbg = {0};
-      uint8_t svpwm_sector = 0u;
-      last_dbg_tick = HAL_GetTick();
-
-      (void)FOC_GetDebugSnapshot(&dbg);
-      FOC_GetSvpwmDebug(&svpwm_sector, 0, 0, 0);
-
-      printf("swp=%u,sec=%u,pair=%u,fb=%u,ccru=%u,ccrv=%u,ccrw=%u,win1=%u,win2=%u,smp=%u,rawu=%u,rawv=%u,raww=%u,iu=%.3f,iv=%.3f,iw=%.3f,isum=%.3f\r\n",
-             (unsigned int)svpwm_sector,
-             (unsigned int)dbg.sec,
-             (unsigned int)dbg.pair,
-             (unsigned int)dbg.fb,
-             (unsigned int)dbg.ccru,
-             (unsigned int)dbg.ccrv,
-             (unsigned int)dbg.ccrw,
-             (unsigned int)dbg.win1,
-             (unsigned int)dbg.win2,
-             (unsigned int)dbg.smp,
-             (unsigned int)dbg.rawu,
-             (unsigned int)dbg.rawv,
-             (unsigned int)dbg.raww,
-             dbg.iu,
-             dbg.iv,
-             dbg.iw,
-             dbg.isum);
-    }
-
-   
+    AppDebug_Task();
   }
   /* USER CODE END 3 */
 }
@@ -253,4 +214,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-

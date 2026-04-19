@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/BSP;../Middleware/Model;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\App\Motor;..\Control\Model</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/BSP;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\Control</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -415,19 +415,9 @@
           <GroupName>Application</GroupName>
           <Files>
             <File>
-              <FileName>foc_bridge.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Core\Inc\foc_bridge.h</FilePath>
-            </File>
-            <File>
               <FileName>foc_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Core\Inc\foc_config.h</FilePath>
-            </File>
-            <File>
-              <FileName>foc_bridge.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Core\Src\foc_bridge.c</FilePath>
             </File>
             <File>
               <FileName>FluxObserver_PLL.h</FileName>
@@ -462,7 +452,124 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>App/Motor</GroupName>
+          <GroupName>App</GroupName>
+          <Files>
+            <File>
+              <FileName>app_foc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\app_foc.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_foc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\app_foc.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_debug.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\app_debug.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_debug.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\app_debug.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Control</GroupName>
+          <Files>
+            <File>
+              <FileName>foc_types.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_types.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_math.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_math.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_sampling.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_sampling.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_sampling.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_sampling.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_pwm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_pwm.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_pwm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_pwm.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_current_loop.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_current_loop.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_current_loop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_current_loop.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_openloop.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_openloop.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_openloop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_openloop.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_observer.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_observer.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_observer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_observer.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_switchover.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_switchover.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_switchover.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_switchover.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_protection.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_protection.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_protection.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_protection.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_debug.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_debug.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_debug.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_debug.c</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>Drivers/STM32G4xx_HAL_Driver</GroupName>

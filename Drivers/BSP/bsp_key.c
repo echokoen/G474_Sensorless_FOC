@@ -8,10 +8,9 @@
 /* USER CODE END Header */
 
 #include "bsp_key.h"
-#include "foc_bridge.h"
+#include "app_foc.h"
 #include "stm32g4xx_hal.h"
 #include <stdio.h>
-
 #define BSP_KEY_DEBOUNCE_MS    (300u)
 
 static uint32_t g_key_last_tick = 0u;
@@ -44,15 +43,15 @@ void BSP_KEY_EXTI_Callback(uint16_t GPIO_Pin)
     g_key_last_tick = now_tick;
 
     /* 直接依据当前状态决定启停，避免上电自动启动后状态不同步。 */
-    if (FOC_GetState() == FOC_STATE_IDLE)
+    if (AppFoc_GetState() == FOC_STATE_IDLE)
     {
-        FOC_Start();
-        printf("[KEY] FOC_Start()\r\n");
+        AppFoc_Start();
+        printf("[KEY] AppFoc_Start()\r\n");
     }
     else
     {
-        FOC_Stop();
-        printf("[KEY] FOC_Stop()\r\n");
+        AppFoc_Stop();
+        printf("[KEY] AppFoc_Stop()\r\n");
     }
 }
 

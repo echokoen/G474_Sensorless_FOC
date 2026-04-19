@@ -5,6 +5,12 @@
 extern "C" {
 #endif
 
+/* Clarke / Park / 反变换基础数学接口。
+ *
+ * 第一轮直接复用这一层作为统一坐标变换底座，
+ * 让上层的 sampling / current_loop / observer 不再各自重复实现。
+ */
+
 typedef struct
 {
   float alpha;

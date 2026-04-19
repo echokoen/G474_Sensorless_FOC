@@ -39,8 +39,5 @@ stm32g474_20260408\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx
 stm32g474_20260408\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 stm32g474_20260408\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 stm32g474_20260408\stm32g4xx_it.o: ../Core/Inc/stm32g4xx_it.h
-stm32g474_20260408\stm32g4xx_it.o: ../Core/Inc/foc_bridge.h
-stm32g474_20260408\stm32g4xx_it.o: ../Drivers/BSP/bsp_adc.h
-stm32g474_20260408\stm32g4xx_it.o: ../Drivers/BSP/bsp_tim.h
-stm32g474_20260408\stm32g4xx_it.o: ../Drivers/BSP/bsp_gpio.h
-stm32g474_20260408\stm32g4xx_it.o: ../Core/Inc/foc_config.h
+stm32g474_20260408\stm32g4xx_it.o: ..\App\app_foc.h
+stm32g474_20260408\stm32g4xx_it.o: ..\Control\foc_types.h

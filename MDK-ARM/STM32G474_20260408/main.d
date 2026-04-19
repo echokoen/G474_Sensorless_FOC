@@ -46,6 +46,7 @@ stm32g474_20260408\main.o: ../Drivers/BSP/bsp_key.h
 stm32g474_20260408\main.o: ../Drivers/BSP/bsp_tim.h
 stm32g474_20260408\main.o: ../Drivers/BSP/bsp_usart.h
 stm32g474_20260408\main.o: ../Drivers/BSP/bsp_gpio.h
-stm32g474_20260408\main.o: ../Core/Inc/foc_bridge.h
-stm32g474_20260408\main.o: ../Core/Inc/foc_config.h
+stm32g474_20260408\main.o: ..\App\app_debug.h
+stm32g474_20260408\main.o: ..\App\app_foc.h
+stm32g474_20260408\main.o: ..\Control\foc_types.h
 stm32g474_20260408\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

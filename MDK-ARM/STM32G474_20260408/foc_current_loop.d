@@ -1,0 +1,9 @@
+stm32g474_20260408\foc_current_loop.o: ..\Control\foc_current_loop.c
+stm32g474_20260408\foc_current_loop.o: ..\Control\foc_current_loop.h
+stm32g474_20260408\foc_current_loop.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
+stm32g474_20260408\foc_current_loop.o: ../Core/Inc/PMSM_Control_Core/Clarke_Park.h
+stm32g474_20260408\foc_current_loop.o: ..\Control\foc_sampling.h
+stm32g474_20260408\foc_current_loop.o: ..\Control\foc_types.h
+stm32g474_20260408\foc_current_loop.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+stm32g474_20260408\foc_current_loop.o: ../Core/Inc/foc_config.h
+stm32g474_20260408\foc_current_loop.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

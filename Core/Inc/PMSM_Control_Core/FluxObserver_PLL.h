@@ -8,6 +8,11 @@ extern "C" {
 #include "main.h"
 #include "foc_config.h"
 
+/* 磁链观测器 + PLL 的输入输出接口。
+ *
+ * 这一层保持为 donor 算法内核，当前工程只负责喂数据和取结果。
+ */
+
 /* 磁链观测器 + PLL 的数据交换结构。
  *
  * 输入：
