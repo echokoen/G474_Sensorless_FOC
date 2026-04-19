@@ -41,16 +41,22 @@ void AppDebug_Task(void)
 
 #if (FOC_DEBUG_PRINT_DETAIL != 0u)
     /*
-     * observer 对接验证打印（详细模式也统一输出这 5 个量）。
+     * switchover 对接验证打印（详细模式）。
      *
      * 字段顺序：
+     * - sw              : 切换状态机状态；
+     * - obs_ready       : observer 是否达到可接管条件；
+     * - blend_k         : 开环/observer 混合系数；
      * - theta_open      : 开环角度；
      * - theta_obs       : 观测角度；
      * - angle_err_deg   : 开环角 - 观测角的误差（度）；
      * - open_speed_rad_s: 开环电角速度；
      * - obs_speed_rad_s : 观测器电角速度。
      */
-    printf("%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+    printf("%u,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+           (unsigned int)rt.switchover.state,
+           (unsigned int)rt.switchover.observer_ready,
+           rt.switchover.blend_k,
            rt.switchover.theta_open_rad,
            rt.switchover.theta_obs_rad,
            rt.switchover.angle_err_deg,
@@ -58,9 +64,12 @@ void AppDebug_Task(void)
            rt.switchover.obs_speed_rad_s);
 #else
     /*
-     * observer 对接验证打印（精简模式）。
+     * switchover 对接验证打印（精简模式）。
      */
-    printf("%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+    printf("%u,%u,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+           (unsigned int)rt.switchover.state,
+           (unsigned int)rt.switchover.observer_ready,
+           rt.switchover.blend_k,
            rt.switchover.theta_open_rad,
            rt.switchover.theta_obs_rad,
            rt.switchover.angle_err_deg,

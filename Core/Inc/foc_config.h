@@ -70,16 +70,16 @@ extern "C" {
 #define FOC_OBS_ENABLE_FREQ_HZ       (8.0f)      /* 机械频率太低时，不对 observer 做锁定判定。 */
 #define FOC_OBS_LOCK_ERR_DEG         (25.0f)     /* 角差在这个范围内，才认为有机会锁住。 */
 #define FOC_OBS_LOCK_HOLD_MS         (200u)      /* 条件持续这么久，才把状态置为 locked。 */
-#define FOC_OBS_THETA_COMP_RAD       (0.4463f)   /* observer 原始角度补偿。 */
+#define FOC_OBS_THETA_COMP_RAD       (-0.4177f)   /* observer 原始角度补偿。 */
 
 /* ==================== switchover 参数 ==================== */
 
-#define FOC_SWITCHOVER_ENABLE              (0u)   /* 1=允许 observer 接管控制角，0=只后台观察。 */
-#define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ    (8.0f) /* 机械频率达到该值后，才允许进入接管判定。 */
-#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG   (30.0f) /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
-#define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO (0.30f) /* observer 电角速度与开环电角速度允许的相对误差。 */
-#define FOC_SWITCHOVER_HOLD_MS             (100u) /* 接管条件连续满足这么久，才进入混合阶段。 */
-#define FOC_SWITCHOVER_BLEND_MS            (500u) /* 从开环角平滑过渡到 observer 角所用时间。 */
+#define FOC_SWITCHOVER_ENABLE              (1u)   /* 1=允许 observer 接管控制角，0=只后台观察。 */
+#define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ    (6.0f) /* 机械频率达到该值后，才允许进入接管判定。 */
+#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG   (8.0f) /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
+#define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO (0.50f) /* observer 电角速度与开环电角速度允许的相对误差。 */
+#define FOC_SWITCHOVER_HOLD_MS             (100) /* 接管条件连续满足这么久，才进入混合阶段。 */
+#define FOC_SWITCHOVER_BLEND_MS            (300u) /* 从开环角平滑过渡到 observer 角所用时间。 */
 
 /* ==================== 保护参数 ==================== */
 
