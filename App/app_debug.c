@@ -42,37 +42,31 @@ void AppDebug_Task(void)
 
 #if (FOC_DEBUG_PRINT_DETAIL != 0u)
     /*
-     * RUN 接管诊断打印（详细模式）。
+     * RUN 接管诊断打印（简化模式）。
      *
      * 字段顺序：
-     * - foc_state  : 主状态机；
-     * - sw         : switchover 状态，0=openloop，1=blend，2=observer；
-     * - speed_ref  : 当前速度环机械速度给定，单位 rad/s；
-     * - speed_fdb  : observer 输出换算后的机械速度反馈，单位 rad/s；
-     * - iq_ref     : 当前 q 轴电流给定；
-     * - iq_meas    : 当前 q 轴电流实测。
-     * - theta_open : 当前开环电角；
-     * - theta_obs  : 当前 observer 电角。
+     * - speed_ref : 当前机械速度给定，单位 rad/s；
+     * - speed_fdb : observer 输出换算后的机械速度反馈，单位 rad/s；
+     * - id_ref    : 当前 d 轴电流给定；
+     * - iq_ref    : 当前 q 轴电流给定；
+     * - id_meas   : 当前 d 轴电流实测；
+     * - iq_meas   : 当前 q 轴电流实测。
      */
-    printf("foc_state=%u,sw=%u,speed_ref=%.3f,speed_fdb=%.3f,iq_ref=%.3f,iq_meas=%.3f,theta_open=%.3f,theta_obs=%.3f\r\n",
-           (unsigned int)AppFoc_GetState(),
-           (unsigned int)rt.switchover.state,
+    printf("speed_ref=%.3f,speed_fdb=%.3f,id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f\r\n",
            rt.speed_loop.speed_ref_mech_rad_s,
            rt.speed_loop.speed_fdb_mech_rad_s,
+           rt.current_loop.id_ref_a,
            rt.current_loop.iq_ref_a,
-           rt.current_loop.iq_meas_a,
-           rt.switchover.theta_open_rad,
-           rt.switchover.theta_obs_rad);
+           rt.current_loop.id_meas_a,
+           rt.current_loop.iq_meas_a);
 #else
-    printf("foc_state=%u,sw=%u,speed_ref=%.3f,speed_fdb=%.3f,iq_ref=%.3f,iq_meas=%.3f,theta_open=%.3f,theta_obs=%.3f\r\n",
-           (unsigned int)AppFoc_GetState(),
-           (unsigned int)rt.switchover.state,
+    printf("speed_ref=%.3f,speed_fdb=%.3f,id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f\r\n",
            rt.speed_loop.speed_ref_mech_rad_s,
            rt.speed_loop.speed_fdb_mech_rad_s,
+           rt.current_loop.id_ref_a,
            rt.current_loop.iq_ref_a,
-           rt.current_loop.iq_meas_a,
-           rt.switchover.theta_open_rad,
-           rt.switchover.theta_obs_rad);
+           rt.current_loop.id_meas_a,
+           rt.current_loop.iq_meas_a);
 #endif
   }
 }

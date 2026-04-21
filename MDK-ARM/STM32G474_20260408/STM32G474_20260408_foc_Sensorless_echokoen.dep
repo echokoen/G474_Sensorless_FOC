@@ -44,7 +44,7 @@ I (../Drivers/BSP/bsp_adc.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_cordic.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_dac.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_dma.h)(0x69E7A96C)
-I (../Drivers/BSP/bsp_key.h)(0x69E7A96C)
+I (../Drivers/BSP/bsp_key.h)(0x69E7B58B)
 I (../Drivers/BSP/bsp_tim.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_usart.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_gpio.h)(0x69E7A96C)
@@ -133,7 +133,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-F (..\Core\Inc\foc_config.h)(0x69E7A96C)()
+F (..\Core\Inc\foc_config.h)(0x69E7D037)()
 F (..\Core\Inc\PMSM_Control_Core\FluxObserver_PLL.h)(0x69E7A96C)()
 F (..\Core\Src\PMSM_Control_Core\FluxObserver_PLL.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\fluxobserver_pll.o --omf_browse stm32g474_20260408\fluxobserver_pll.crf --depend stm32g474_20260408\fluxobserver_pll.d)
 I (../Core/Inc/PMSM_Control_Core/FluxObserver_PLL.h)(0x69E7A96C)
@@ -175,7 +175,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (C:\Keil_v5\ARM\ARMCC\include\math.h)(0x60252378)
 F (..\Core\Inc\PMSM_Control_Core\Clarke_Park.h)(0x69E7A96C)()
 F (..\Core\Src\PMSM_Control_Core\Clarke_Park.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\clarke_park.o --omf_browse stm32g474_20260408\clarke_park.crf --depend stm32g474_20260408\clarke_park.d)
@@ -185,7 +185,7 @@ F (..\Core\Inc\PMSM_Control_Core\PI_Controller.h)(0x69E7A96C)()
 F (..\Core\Src\PMSM_Control_Core\PI_Controller.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\pi_controller.o --omf_browse stm32g474_20260408\pi_controller.crf --depend stm32g474_20260408\pi_controller.d)
 I (../Core/Inc/PMSM_Control_Core/PI_Controller.h)(0x69E7A96C)
 F (..\App\app_foc.h)(0x69E7A96C)()
-F (..\App\app_foc.c)(0x69E7AF67)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\app_foc.o --omf_browse stm32g474_20260408\app_foc.crf --depend stm32g474_20260408\app_foc.d)
+F (..\App\app_foc.c)(0x69E7B586)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\app_foc.o --omf_browse stm32g474_20260408\app_foc.crf --depend stm32g474_20260408\app_foc.d)
 I (..\App\app_foc.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025237E)
@@ -227,8 +227,9 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (../Core/Inc/PMSM_Control_Core/PI_Controller.h)(0x69E7A96C)
+I (../Drivers/BSP/bsp_key.h)(0x69E7B58B)
 I (../Drivers/BSP/bsp_adc.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_gpio.h)(0x69E7A96C)
 I (../Drivers/BSP/bsp_tim.h)(0x69E7A96C)
@@ -243,12 +244,12 @@ I (..\Control\foc_protection.h)(0x69E7A96C)
 I (..\Control\foc_switchover.h)(0x69E7A96C)
 I (C:\Keil_v5\ARM\ARMCC\include\math.h)(0x60252378)
 F (..\App\app_debug.h)(0x69E7A96C)()
-F (..\App\app_debug.c)(0x69E7B079)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\app_debug.o --omf_browse stm32g474_20260408\app_debug.crf --depend stm32g474_20260408\app_debug.d)
+F (..\App\app_debug.c)(0x69E7D092)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\app_debug.o --omf_browse stm32g474_20260408\app_debug.crf --depend stm32g474_20260408\app_debug.d)
 I (..\App\app_debug.h)(0x69E7A96C)
 I (..\App\app_foc.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025237E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (../Core/Inc/main.h)(0x69E7A96C)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h)(0x69E7A96E)
 I (../Core/Inc/stm32g4xx_hal_conf.h)(0x69E7A96C)
@@ -333,7 +334,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (..\Control\foc_math.h)(0x69E7A96C)
 F (..\Control\foc_pwm.h)(0x69E7A96C)()
 F (..\Control\foc_pwm.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\foc_pwm.o --omf_browse stm32g474_20260408\foc_pwm.crf --depend stm32g474_20260408\foc_pwm.d)
@@ -378,7 +379,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (C:\Keil_v5\ARM\ARMCC\include\math.h)(0x60252378)
 F (..\Control\foc_current_loop.h)(0x69E7A96C)()
 F (..\Control\foc_current_loop.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\foc_current_loop.o --omf_browse stm32g474_20260408\foc_current_loop.crf --depend stm32g474_20260408\foc_current_loop.d)
@@ -388,13 +389,13 @@ I (../Core/Inc/PMSM_Control_Core/Clarke_Park.h)(0x69E7A96C)
 I (..\Control\foc_sampling.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025237E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (C:\Keil_v5\ARM\ARMCC\include\math.h)(0x60252378)
 F (..\Control\foc_openloop.h)(0x69E7A96C)()
 F (..\Control\foc_openloop.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\foc_openloop.o --omf_browse stm32g474_20260408\foc_openloop.crf --depend stm32g474_20260408\foc_openloop.d)
 I (..\Control\foc_openloop.h)(0x69E7A96C)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025237E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (..\Control\foc_math.h)(0x69E7A96C)
 F (..\Control\foc_observer.h)(0x69E7A96C)()
 F (..\Control\foc_observer.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\foc_observer.o --omf_browse stm32g474_20260408\foc_observer.crf --depend stm32g474_20260408\foc_observer.d)
@@ -438,7 +439,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (..\Control\foc_sampling.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
 I (..\Control\foc_math.h)(0x69E7A96C)
@@ -486,7 +487,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (..\Control\foc_sampling.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
 I (..\Control\foc_openloop.h)(0x69E7A96C)
@@ -537,7 +538,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (C:\Keil_v5\ARM\ARMCC\include\math.h)(0x60252378)
 F (..\Control\foc_debug.h)(0x69E7A96C)()
 F (..\Control\foc_debug.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\foc_debug.o --omf_browse stm32g474_20260408\foc_debug.crf --depend stm32g474_20260408\foc_debug.d)
@@ -1543,8 +1544,8 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
-F (../Drivers/BSP/bsp_key.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\bsp_key.o --omf_browse stm32g474_20260408\bsp_key.crf --depend stm32g474_20260408\bsp_key.d)
-I (../Drivers/BSP/bsp_key.h)(0x69E7A96C)
+F (../Drivers/BSP/bsp_key.c)(0x69E7B597)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\bsp_key.o --omf_browse stm32g474_20260408\bsp_key.crf --depend stm32g474_20260408\bsp_key.d)
+I (../Drivers/BSP/bsp_key.h)(0x69E7B58B)
 I (../Core/Inc/main.h)(0x69E7A96C)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h)(0x69E7A96E)
 I (../Core/Inc/stm32g4xx_hal_conf.h)(0x69E7A96C)
@@ -1585,7 +1586,7 @@ I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h)(0x69E7A96E)
 I (../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h)(0x69E7A96E)
 I (..\App\app_foc.h)(0x69E7A96C)
 I (..\Control\foc_types.h)(0x69E7AF55)
-I (../Core/Inc/foc_config.h)(0x69E7A96C)
+I (../Core/Inc/foc_config.h)(0x69E7D037)
 I (C:\Keil_v5\ARM\ARMCC\include\stdio.h)(0x60252374)
 F (../Drivers/BSP/bsp_dac.c)(0x69E7A96C)(--c99 -c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O3 --apcs=interwork --split_sections -I ../Core/Inc -I ../Drivers/BSP -I ../Drivers/STM32G4xx_HAL_Driver/Inc -I ../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy -I ../Drivers/CMSIS/Device/ST/STM32G4xx/Include -I ../Drivers/CMSIS/Include -I ..\App -I ..\Control-I.\RTE\_foc_Sensorless_echokoen-IC:\Users\10095\AppData\Local\Arm\Packs\ARM\CMSIS\6.1.0\CMSIS\Core\Include-IC:\Users\10095\AppData\Local\Arm\Packs\Keil\STM32G4xx_DFP\1.5.0\Drivers\CMSIS\Device\ST\STM32G4xx\Include-D__UVISION_VERSION="542" -DSTM32G474xx -D_RTE_ -DUSE_HAL_DRIVER -DSTM32G474xx-o stm32g474_20260408\bsp_dac.o --omf_browse stm32g474_20260408\bsp_dac.crf --depend stm32g474_20260408\bsp_dac.d)
 I (../Drivers/BSP/bsp_dac.h)(0x69E7A96C)

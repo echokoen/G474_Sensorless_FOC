@@ -13,6 +13,7 @@
 
 #include "PMSM_Control_Core/FluxObserver_PLL.h"
 #include "PMSM_Control_Core/PI_Controller.h"
+#include "bsp_key.h"
 #include "bsp_adc.h"
 #include "bsp_gpio.h"
 #include "bsp_tim.h"
@@ -157,8 +158,7 @@ static void app_foc_speed_loop_reset(float speed_init_mech_rad_s)
   s_speed_loop.speed_fdb_mech_rad_s = speed_init_mech_rad_s;
   s_speed_loop.speed_fdb_raw_mech_rad_s = speed_init_mech_rad_s;
   s_speed_loop.speed_ref_cmd_mech_rad_s = speed_init_mech_rad_s;
-  /* speed_target 由外部接口单独维护，这里不要覆盖，
-   * 避免 switchover 或再次进 RUN 时把用户设定速度抹掉。 */
+  s_speed_loop.speed_target_mech_rad_s = speed_init_mech_rad_s;
   s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
   s_speed_loop.run_entry_tick_ms = HAL_GetTick();
   s_speed_loop.speed_enable_tick_ms = 0u;
@@ -179,6 +179,7 @@ static void app_foc_prepare_run_entry(void)
   }
 
   app_foc_speed_loop_reset(speed_init_mech_rad_s);
+  BSP_KEY_SetSpeedTargetHz(speed_init_mech_rad_s / 6.28318530718f);
 }
 
 static uint8_t app_foc_speed_loop_is_enabled(void)
@@ -189,10 +190,8 @@ static uint8_t app_foc_speed_loop_is_enabled(void)
 static void app_foc_speed_loop_step(void)
 {
   const float dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
-  const float ramp_step = FOC_SPEED_REF_RAMP_HZ_PER_S * 6.28318530718f * dt_sec;
   const float speed_alpha = app_foc_clampf(FOC_SPEED_FDB_FILTER_ALPHA, 0.0f, 1.0f);
   const uint32_t now_ms = HAL_GetTick();
-  float speed_err;
   float iq_cmd;
 
   s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
@@ -203,30 +202,17 @@ static void app_foc_speed_loop_step(void)
   {
     /* observer 接管后的缓冲窗口：
      * - 保持 I/F 末端的正扭矩，避免刚入 RUN 就失去拉力；
-     * - 同时让速度反馈滤波值先稳定下来；
-     * - 真正启用速度环那一拍，再把速度目标对齐到当前反馈。 */
+     * - 同时让速度反馈滤波值先稳定下来。 */
     s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
 
     if ((now_ms - s_speed_loop.run_entry_tick_ms) >= FOC_SPEED_ENABLE_DELAY_MS)
     {
       PIController_Reset(&s_speed_loop.pi);
-      s_speed_loop.speed_ref_cmd_mech_rad_s = s_speed_loop.speed_fdb_mech_rad_s;
       s_speed_loop.speed_enable_tick_ms = now_ms;
       s_speed_loop.enabled = 1u;
     }
     return;
   }
-
-  speed_err = s_speed_loop.speed_target_mech_rad_s - s_speed_loop.speed_ref_cmd_mech_rad_s;
-  if (speed_err > ramp_step)
-  {
-    speed_err = ramp_step;
-  }
-  else if (speed_err < -ramp_step)
-  {
-    speed_err = -ramp_step;
-  }
-  s_speed_loop.speed_ref_cmd_mech_rad_s += speed_err;
 
   iq_cmd = PIController_Run(&s_speed_loop.pi,
                             s_speed_loop.speed_ref_cmd_mech_rad_s,
@@ -932,6 +918,7 @@ void AppFoc_SetSpeedTargetMechHz(float mech_hz)
     target_rad_s = 0.0f;
   }
 
+  s_speed_loop.speed_ref_cmd_mech_rad_s = target_rad_s;
   s_speed_loop.speed_target_mech_rad_s = target_rad_s;
 }
 

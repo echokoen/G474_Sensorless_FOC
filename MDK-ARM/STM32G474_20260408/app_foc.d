@@ -43,6 +43,7 @@ stm32g474_20260408\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_
 stm32g474_20260408\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 stm32g474_20260408\app_foc.o: ../Core/Inc/foc_config.h
 stm32g474_20260408\app_foc.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
+stm32g474_20260408\app_foc.o: ../Drivers/BSP/bsp_key.h
 stm32g474_20260408\app_foc.o: ../Drivers/BSP/bsp_adc.h
 stm32g474_20260408\app_foc.o: ../Drivers/BSP/bsp_gpio.h
 stm32g474_20260408\app_foc.o: ../Drivers/BSP/bsp_tim.h

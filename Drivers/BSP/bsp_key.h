@@ -16,6 +16,7 @@ extern "C" {
 
 void BSP_KEY_Init(void);
 void BSP_KEY_Task(void);
+void BSP_KEY_SetSpeedTargetHz(float mech_hz);
 void BSP_KEY_EXTI_Callback(uint16_t GPIO_Pin);
 #ifdef __cplusplus
 }

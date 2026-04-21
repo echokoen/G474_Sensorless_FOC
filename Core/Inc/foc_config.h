@@ -41,8 +41,8 @@ extern "C" {
 #define FOC_ID_KI                    (3330.0f)   /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*1000。 */
 #define FOC_IQ_KP                    (3.770f)    /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */
 #define FOC_IQ_KI                    (3330.0f)   /* q 轴电流 PI 积分增益，第一阶段按 d/q 同参数处理。 */
-#define FOC_CURR_LOOP_V_LIMIT        (6.0f)      /* 单个 PI 输出电压限幅。 */
-#define FOC_DQ_VOLT_LIMIT            (6.0f)      /* dq 电压矢量总幅值限幅。 */
+#define FOC_CURR_LOOP_V_LIMIT        (13.5f)      /* 单个 PI 输出电压限幅。 */
+#define FOC_DQ_VOLT_LIMIT            (13.5f)      /* dq 电压矢量总幅值限幅。 */
 #define FOC_VD_CMD_SIGN              (-1.0f)     /* d 轴电压输出极性，实测 +Vd 得到 -Id，因此这里取反。 */
 #define FOC_VQ_CMD_SIGN              (-1.0f)     /* q 轴电压输出极性，实测 +Vq 得到 -Iq，因此这里取反。 */
 #define FOC_DQ_TEST_VD_V             (1.5f)      /* dq 电压注入测试的 d 轴电压，当前验证 d 轴极性。 */
@@ -76,7 +76,7 @@ extern "C" {
 #define FOC_OBS_PLL_KP               (180.0f)    /* PLL 比例增益，调小可降低速度尖峰。 */
 #define FOC_OBS_PLL_KI               (6000.0f)   /* PLL 积分增益，调小可降低低速抖动。 */
 #define FOC_OBS_PLL_INTEGRAL_LIMIT   (700.0f)    /* PLL 积分项限幅，单位 rad/s。 */
-#define FOC_OBS_SPEED_LIMIT_RAD_S    (800.0f)    /* observer 电角速度输出限幅。 */
+#define FOC_OBS_SPEED_LIMIT_RAD_S    (1200.0f)    /* observer 电角速度输出限幅。 */
 #define FOC_OBS_SPEED_FILTER_ALPHA   (0.20f)     /* observer 速度一阶滤波系数，0~1，越小越平滑。 */
 
 /* ==================== switchover 参数 ==================== */
@@ -95,7 +95,7 @@ extern "C" {
 #define FOC_SPEED_KP                 (0.08f)     /* 速度环比例增益，先保守一些，避免 observer 接管后 iq_ref 抽动。 */
 #define FOC_SPEED_KI                 (2.0f)      /* 速度环积分增益，第一版只求能稳，不求快。 */
 #define FOC_SPEED_IQ_MIN_A           (0.0f)      /* 当前速度环先只允许正扭矩，不做主动制动。 */
-#define FOC_SPEED_IQ_MAX_A           (1.2f)      /* 速度环输出的 q 轴电流上限。 */
+#define FOC_SPEED_IQ_MAX_A           (4.0f)      /* 速度环输出的 q 轴电流上限。 */
 #define FOC_SPEED_ENABLE_DELAY_MS    (200u)      /* 进入 RUN 后先 observer-only hold 一小段，再真正开启速度环。 */
 #define FOC_SPEED_REF_RAMP_HZ_PER_S  (3.0f)      /* 速度给定斜率；当前默认目标由接管瞬间的实际速度初始化。 */
 #define FOC_SPEED_FDB_FILTER_ALPHA   (0.08f)     /* RUN 阶段速度反馈一阶低通系数。 */

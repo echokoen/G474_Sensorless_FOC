@@ -19,8 +19,8 @@
 #define BSP_KEY_REPEAT_MS            (120u)
 #define BSP_KEY_SPEED_STEP_SHORT_HZ  (0.5f)
 #define BSP_KEY_SPEED_STEP_LONG_HZ   (0.2f)
-#define BSP_KEY_SPEED_MIN_HZ         (6.0f)
-#define BSP_KEY_SPEED_MAX_HZ         (46.667f)
+#define BSP_KEY_SPEED_MIN_HZ         (16.667f)   /* 1000 rpm */
+#define BSP_KEY_SPEED_MAX_HZ         (50.0f)     /* 3000 rpm */
 
 typedef struct
 {
@@ -112,7 +112,13 @@ void BSP_KEY_Init(void)
     g_key0_state = (BSP_KeyRepeatState_t){0};
     g_key1_state = (BSP_KeyRepeatState_t){0};
     g_speed_target_mech_hz = FOC_SPEED_REF_MECH_HZ;
-    AppFoc_SetSpeedTargetMechHz(g_speed_target_mech_hz);
+}
+
+void BSP_KEY_SetSpeedTargetHz(float mech_hz)
+{
+    g_speed_target_mech_hz = bsp_key_clampf(mech_hz,
+                                            BSP_KEY_SPEED_MIN_HZ,
+                                            BSP_KEY_SPEED_MAX_HZ);
 }
 
 void BSP_KEY_Task(void)
