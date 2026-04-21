@@ -3,7 +3,7 @@
 <title>Static Call Graph - [STM32G474_20260408\STM32G474_20260408.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image STM32G474_20260408\STM32G474_20260408.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Tue Apr 21 10:05:24 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Tue Apr 21 10:32:12 2026
 <BR><P>
 <H3>Maximum Stack Usage =        352 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -616,7 +616,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[1c]"></a>ADC1_2_IRQHandler</STRONG> (Thumb, 6 bytes, Stack size 0 bytes, stm32g4xx_it.o(i.ADC1_2_IRQHandler))
-<BR><BR>[Stack]<UL><LI>Max Depth = 228<LI>Call Chain = ADC1_2_IRQHandler &rArr; HAL_ADC_IRQHandler &rArr; HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<BR><BR>[Stack]<UL><LI>Max Depth = 252<LI>Call Chain = ADC1_2_IRQHandler &rArr; HAL_ADC_IRQHandler &rArr; HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[85]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_ADC_IRQHandler
 </UL>
@@ -689,7 +689,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[94]"></a>AppFoc_HighFreqTask</STRONG> (Thumb, 106 bytes, Stack size 8 bytes, app_foc.o(i.AppFoc_HighFreqTask))
-<BR><BR>[Stack]<UL><LI>Max Depth = 188<LI>Call Chain = AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<BR><BR>[Stack]<UL><LI>Max Depth = 212<LI>Call Chain = AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[97]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_SamplingModule_RunOffsetCalib
 <LI><a href="#[95]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_PwmModule_SetTim1Mid
@@ -803,6 +803,8 @@ Global Symbols
 <LI><a href="#[c0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;__hardfp_cosf
 </UL>
 <BR>[Called By]<UL><LI><a href="#[c9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_CurrentLoopRunWithRef
+<LI><a href="#[99]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_run_openloop
+<LI><a href="#[98]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_run_align
 </UL>
 
 <P><STRONG><a name="[c1]"></a>ClarkePark_Park</STRONG> (Thumb, 90 bytes, Stack size 24 bytes, clarke_park.o(i.ClarkePark_Park))
@@ -1114,7 +1116,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[ec]"></a>HAL_ADCEx_InjectedConvCpltCallback</STRONG> (Thumb, 12 bytes, Stack size 0 bytes, stm32g4xx_it.o(i.HAL_ADCEx_InjectedConvCpltCallback))
-<BR><BR>[Stack]<UL><LI>Max Depth = 188<LI>Call Chain = HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<BR><BR>[Stack]<UL><LI>Max Depth = 212<LI>Call Chain = HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[94]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AppFoc_HighFreqTask
 </UL>
@@ -1210,7 +1212,7 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[85]"></a>HAL_ADC_IRQHandler</STRONG> (Thumb, 674 bytes, Stack size 40 bytes, stm32g4xx_hal_adc.o(i.HAL_ADC_IRQHandler))
-<BR><BR>[Stack]<UL><LI>Max Depth = 228<LI>Call Chain = HAL_ADC_IRQHandler &rArr; HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<BR><BR>[Stack]<UL><LI>Max Depth = 252<LI>Call Chain = HAL_ADC_IRQHandler &rArr; HAL_ADCEx_InjectedConvCpltCallback &rArr; AppFoc_HighFreqTask &rArr; app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[ec]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_ADCEx_InjectedConvCpltCallback
 <LI><a href="#[f5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;HAL_ADC_LevelOutOfWindowCallback
@@ -2213,8 +2215,8 @@ Local Symbols
 <LI><a href="#[9c]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AppFoc_Init
 </UL>
 
-<P><STRONG><a name="[98]"></a>app_foc_run_align</STRONG> (Thumb, 128 bytes, Stack size 24 bytes, app_foc.o(i.app_foc_run_align))
-<BR><BR>[Stack]<UL><LI>Max Depth = 180<LI>Call Chain = app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<P><STRONG><a name="[98]"></a>app_foc_run_align</STRONG> (Thumb, 186 bytes, Stack size 48 bytes, app_foc.o(i.app_foc_run_align))
+<BR><BR>[Stack]<UL><LI>Max Depth = 204<LI>Call Chain = app_foc_run_align &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[95]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_PwmModule_SetTim1Mid
 <LI><a href="#[d4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_PwmModule_ApplySvpwm
@@ -2223,12 +2225,13 @@ Local Symbols
 <LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_stop_to_fault
 <LI><a href="#[165]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_sampling_update
 <LI><a href="#[96]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_drive_enable
+<LI><a href="#[be]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ClarkePark_InvPark
 </UL>
 <BR>[Called By]<UL><LI><a href="#[94]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AppFoc_HighFreqTask
 </UL>
 
-<P><STRONG><a name="[99]"></a>app_foc_run_openloop</STRONG> (Thumb, 132 bytes, Stack size 16 bytes, app_foc.o(i.app_foc_run_openloop))
-<BR><BR>[Stack]<UL><LI>Max Depth = 172<LI>Call Chain = app_foc_run_openloop &rArr; FOC_CurrentLoopRunOpenLoopCurrent &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
+<P><STRONG><a name="[99]"></a>app_foc_run_openloop</STRONG> (Thumb, 206 bytes, Stack size 40 bytes, app_foc.o(i.app_foc_run_openloop))
+<BR><BR>[Stack]<UL><LI>Max Depth = 196<LI>Call Chain = app_foc_run_openloop &rArr; FOC_CurrentLoopRunOpenLoopCurrent &rArr; FOC_CurrentLoopRunWithRef &rArr; FOC_CurrentLoopMeasureDQ &rArr; ClarkePark_Park &rArr; __hardfp_sinf &rArr; __mathlib_rredf2
 </UL>
 <BR>[Calls]<UL><LI><a href="#[e1]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_SwitchoverUpdate
 <LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_SwitchoverSelectTheta
@@ -2239,6 +2242,7 @@ Local Symbols
 <LI><a href="#[c8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;FOC_CurrentLoopRunOpenLoopCurrent
 <LI><a href="#[9a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_stop_to_fault
 <LI><a href="#[165]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;app_foc_sampling_update
+<LI><a href="#[be]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;ClarkePark_InvPark
 </UL>
 <BR>[Called By]<UL><LI><a href="#[94]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;AppFoc_HighFreqTask
 </UL>

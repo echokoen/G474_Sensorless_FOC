@@ -50,7 +50,7 @@ extern "C" {
 
 /* ==================== 启动 / 对齐 / 开环参数 ==================== */
 
-#define FOC_ALIGN_TIME_MS            (30000u)      /* 对齐阶段持续时间，单位 ms，过短可能导致转子未吸稳就进入开环。 */
+#define FOC_ALIGN_TIME_MS            (300u)      /* 对齐阶段持续时间，单位 ms，过短可能导致转子未吸稳就进入开环。 */
 #define FOC_ALIGN_ID_REF_A           (0.8f)      /* 对齐阶段 d 轴电流给定，固定角度下用小电流把转子吸到对齐位置。 */
 #define FOC_ALIGN_THETA_OFFSET_RAD   (0.0f)      /* 对齐角补偿。当前 V/F observer 标定阶段先归零。 */
 #define FOC_OPENLOOP_VDQ_V           (6.0f)      /* 开环旋转时的电压幅值，太小带不动，太大会过流。 */

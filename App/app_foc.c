@@ -224,11 +224,13 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
  * 1. 先把 PWM 回到中点，保证从安全状态开始；
  * 2. 第一次进入时打开驱动；
  * 3. 刷新电流/母线采样并做保护检查；
- * 4. 用固定 d 轴电压把转子吸到预期电角位置；
+ * 4. 固定角度运行 d 轴电流闭环，把转子吸到预期电角位置；
  * 5. 对齐时间到后切到 OPENLOOP。
  */
 static void app_foc_run_align(void)
 {
+  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
+  ClarkePark_DQ_t vdq = {0.0f, 0.0f};
   float valpha = 0.0f;
   float vbeta = 0.0f;
 
@@ -262,6 +264,15 @@ static void app_foc_run_align(void)
                             0.0f,
                             &valpha,
                             &vbeta);
+  /* 对齐阶段只保留 d 轴磁场，直接把 q 轴电压清零，避免额外转矩导致持续抖动。 */
+  vdq.d = s_current_loop.vd_cmd_v;
+  vdq.q = 0.0f;
+  ClarkePark_InvPark(&vdq, s_openloop.theta_e_rad, &vab);
+  s_current_loop.vq_cmd_v = 0.0f;
+  s_current_loop.valpha_cmd_v = vab.alpha;
+  s_current_loop.vbeta_cmd_v = vab.beta;
+  valpha = s_current_loop.valpha_cmd_v;
+  vbeta = s_current_loop.vbeta_cmd_v;
   FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
 
   s_openloop.align_ticks++;
@@ -283,6 +294,8 @@ static void app_foc_run_align(void)
  */
 static void app_foc_run_openloop(void)
 {
+  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
+  ClarkePark_DQ_t vdq = {0.0f, 0.0f};
   float theta_ctrl;
   float valpha = 0.0f;
   float vbeta = 0.0f;
@@ -301,6 +314,18 @@ static void app_foc_run_openloop(void)
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
   FOC_CurrentLoopRunOpenLoopCurrent(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
+  /* 当前调试版本先把开环阶段简化为“只保留 q 轴转矩推进”：
+   * - ALIGN 阶段只保留 Vd；
+   * - ALIGN 之后把 Vd_cmd 直接清零；
+   * 这样可以把 d 轴补偿从开环链路里拿掉，先把 q 轴推进方向验证干净。 */
+  vdq.d = 0.0f;
+  vdq.q = s_current_loop.vq_cmd_v;
+  ClarkePark_InvPark(&vdq, theta_ctrl, &vab);
+  s_current_loop.vd_cmd_v = 0.0f;
+  s_current_loop.valpha_cmd_v = vab.alpha;
+  s_current_loop.vbeta_cmd_v = vab.beta;
+  valpha = s_current_loop.valpha_cmd_v;
+  vbeta = s_current_loop.vbeta_cmd_v;
 #elif (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
   FOC_CurrentLoopRunOpenLoopVoltTest(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
 #else
