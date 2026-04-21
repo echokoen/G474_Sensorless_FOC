@@ -73,6 +73,10 @@ void Error_Handler(void);
 #define DBG_DAC_CH1_GPIO_Port GPIOA
 #define DBG_DAC_CH2_Pin GPIO_PIN_6
 #define DBG_DAC_CH2_GPIO_Port GPIOA
+#define KEY0_Pin GPIO_PIN_12
+#define KEY0_GPIO_Port GPIOE
+#define KEY1_Pin GPIO_PIN_13
+#define KEY1_GPIO_Port GPIOE
 #define Start_Stop_Pin GPIO_PIN_14
 #define Start_Stop_GPIO_Port GPIOE
 #define Start_Stop_EXTI_IRQn EXTI15_10_IRQn

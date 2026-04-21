@@ -41,4 +41,5 @@ stm32g474_20260408\bsp_key.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_
 stm32g474_20260408\bsp_key.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 stm32g474_20260408\bsp_key.o: ..\App\app_foc.h
 stm32g474_20260408\bsp_key.o: ..\Control\foc_types.h
+stm32g474_20260408\bsp_key.o: ../Core/Inc/foc_config.h
 stm32g474_20260408\bsp_key.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

@@ -130,6 +130,16 @@ typedef struct
   float theta_ctrl_rad;   /* 本拍控制角。 */
 } FOC_CurrentLoopSnapshot_t;
 
+/* 速度环快照。 */
+typedef struct
+{
+  float speed_ref_mech_rad_s;  /* 当前机械速度给定，单位 rad/s。 */
+  float speed_target_mech_rad_s; /* 当前机械速度目标，单位 rad/s。 */
+  float speed_fdb_mech_rad_s;  /* 当前机械速度反馈，单位 rad/s。 */
+  float iq_ref_cmd_a;          /* 速度环输出的 q 轴电流给定。 */
+  uint8_t enabled;             /* 速度环是否已经真正使能。 */
+} FOC_SpeedLoopSnapshot_t;
+
 /* 开环到观测器切换快照。 */
 typedef struct
 {
@@ -158,6 +168,7 @@ typedef struct
   FOC_ObserverSnapshot_t observer;          /* 观测器状态。 */
   FOC_SamplingSnapshot_t sampling;          /* 采样状态。 */
   FOC_CurrentLoopSnapshot_t current_loop;   /* 电流环状态。 */
+  FOC_SpeedLoopSnapshot_t speed_loop;       /* 速度环状态。 */
   FOC_SwitchoverSnapshot_t switchover;      /* 切换状态。 */
 } FOC_RuntimeSnapshot_t;
 

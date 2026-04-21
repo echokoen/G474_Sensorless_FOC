@@ -35,8 +35,6 @@ void FOC_ObserverUpdate(FOC_ObserverData_t *observer,
                         float mech_freq_hz)
 {
   float angle_err_rad;
-  const float elec_freq_hz = mech_freq_hz * FOC_POLE_PAIRS;
-
   if ((observer == 0) || (sampling == 0))
   {
     return;
@@ -52,7 +50,7 @@ void FOC_ObserverUpdate(FOC_ObserverData_t *observer,
   angle_err_rad = FOC_MathWrapPi(theta_open_rad - observer->theta_rad);
   observer->angle_err_deg = FOC_MathRadToDeg(angle_err_rad);
 
-  if ((elec_freq_hz >= FOC_OBS_ENABLE_FREQ_HZ) && (fabsf(observer->angle_err_deg) < FOC_OBS_LOCK_ERR_DEG))
+  if ((mech_freq_hz >= FOC_OBS_ENABLE_FREQ_HZ) && (fabsf(observer->angle_err_deg) < FOC_OBS_LOCK_ERR_DEG))
   {
     if (observer->hold_ticks < (uint32_t)(FOC_OBS_LOCK_HOLD_MS / (FOC_TS_SEC * 1000.0f)))
     {

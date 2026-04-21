@@ -72,7 +72,7 @@ extern "C" {
 #define FOC_OBS_ENABLE_FREQ_HZ       (8.0f)      /* 机械频率太低时，不对 observer 做锁定判定。 */
 #define FOC_OBS_LOCK_ERR_DEG         (25.0f)     /* 角差在这个范围内，才认为有机会锁住。 */
 #define FOC_OBS_LOCK_HOLD_MS         (200u)      /* 条件持续这么久，才把状态置为 locked。 */
-#define FOC_OBS_THETA_COMP_RAD       (-0.4177f)   /* observer 原始角度补偿。 */
+#define FOC_OBS_THETA_COMP_RAD       (2.7239f)    /* observer 原始角度补偿；当前验证阶段先在原补偿基础上加 pi，检查半圈相位偏置是否为主因。 */
 #define FOC_OBS_PLL_KP               (180.0f)    /* PLL 比例增益，调小可降低速度尖峰。 */
 #define FOC_OBS_PLL_KI               (6000.0f)   /* PLL 积分增益，调小可降低低速抖动。 */
 #define FOC_OBS_PLL_INTEGRAL_LIMIT   (700.0f)    /* PLL 积分项限幅，单位 rad/s。 */
@@ -81,13 +81,26 @@ extern "C" {
 
 /* ==================== switchover 参数 ==================== */
 
-#define FOC_SWITCHOVER_ENABLE                   (0u)    /* 1=允许 observer 接管控制角，0=只后台观察。 */
+#define FOC_SWITCHOVER_ENABLE                   (1u)    /* 1=允许 observer 接管控制角，0=只后台观察。 */
 #define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ         (6.0f)  /* 机械频率达到该值后，才允许进入接管判定。 */
 #define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG        (8.0f)  /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
 #define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO      (0.50f) /* observer 电角速度与开环电角速度允许的相对误差。 */
 #define FOC_SWITCHOVER_MAX_SPEED_ERR_MIN_RAD_S  (20.0f) /* 速度误差下限门限：低速时也保留一个最小绝对误差窗口。 */
 #define FOC_SWITCHOVER_HOLD_MS                  (100u)  /* 接管条件连续满足这么久，才进入混合阶段。 */
 #define FOC_SWITCHOVER_BLEND_MS                 (300u)  /* 从开环角平滑过渡到 observer 角所用时间。 */
+
+/* ==================== 速度环参数 ==================== */
+
+#define FOC_SPEED_REF_MECH_HZ        (12.0f)     /* RUN 阶段默认机械速度目标，当前版本进入 RUN 时先不直接跳到该值。 */
+#define FOC_SPEED_KP                 (0.08f)     /* 速度环比例增益，先保守一些，避免 observer 接管后 iq_ref 抽动。 */
+#define FOC_SPEED_KI                 (2.0f)      /* 速度环积分增益，第一版只求能稳，不求快。 */
+#define FOC_SPEED_IQ_MIN_A           (0.0f)      /* 当前速度环先只允许正扭矩，不做主动制动。 */
+#define FOC_SPEED_IQ_MAX_A           (1.2f)      /* 速度环输出的 q 轴电流上限。 */
+#define FOC_SPEED_ENABLE_DELAY_MS    (200u)      /* 进入 RUN 后先 observer-only hold 一小段，再真正开启速度环。 */
+#define FOC_SPEED_REF_RAMP_HZ_PER_S  (3.0f)      /* 速度给定斜率；当前默认目标由接管瞬间的实际速度初始化。 */
+#define FOC_SPEED_FDB_FILTER_ALPHA   (0.08f)     /* RUN 阶段速度反馈一阶低通系数。 */
+#define FOC_SPEED_TAKEOVER_IQ_HOLD_A (0.30f)     /* 速度环刚接入后的最小正扭矩底座，避免 iq_ref 立即掉空。 */
+#define FOC_SPEED_TAKEOVER_HOLD_MS   (300u)      /* 速度环刚接入后的底座保持时间。 */
 
 /* ==================== 保护参数 ==================== */
 

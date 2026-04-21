@@ -97,6 +97,13 @@ uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
  */
 uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot);
 
+/* 设置 RUN 阶段的机械速度目标，单位 Hz。
+ *
+ * 当前版本默认在进入 RUN 时先用当前 observer 速度接管，
+ * 后续如果需要变速，可通过该接口修改速度环目标。
+ */
+void AppFoc_SetSpeedTargetMechHz(float mech_hz);
+
 /* 获取当前锁存的故障原因位图。 */
 uint32_t AppFoc_GetFaultFlags(void);
 

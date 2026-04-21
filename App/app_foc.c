@@ -12,6 +12,7 @@
  */
 
 #include "PMSM_Control_Core/FluxObserver_PLL.h"
+#include "PMSM_Control_Core/PI_Controller.h"
 #include "bsp_adc.h"
 #include "bsp_gpio.h"
 #include "bsp_tim.h"
@@ -24,6 +25,7 @@
 #include "foc_pwm.h"
 #include "foc_sampling.h"
 #include "foc_switchover.h"
+#include <math.h>
 
 extern TIM_HandleTypeDef htim1;
 extern ADC_HandleTypeDef hadc1;
@@ -81,9 +83,168 @@ typedef struct
   uint32_t fault_flags;
 } AppFoc_Feedback_t;
 
-static AppFoc_Command_t s_cmd = {0};
+static AppFoc_Command_t s_cmd = {FOC_STATE_IDLE, APP_FOC_THETA_MODE_ALIGN, 0.0f, 0.0f, 0.0f, 0u};
 static AppFoc_Feedback_t s_feedback = {0};
 static uint32_t s_last_medium_tick_ms = 0u;
+
+/* 最小速度环。
+ *
+ * 设计原则：
+ * - 只在 RUN 阶段启用；
+ * - 只输出 q 轴电流参考，不碰 d 轴；
+ * - 输出先限制为非负，避免当前调试阶段引入制动扭矩；
+ * - 刚进入 RUN 时先用当前反馈初始化速度给定，再缓慢斜坡到目标值。
+ */
+typedef struct
+{
+  PIController_t pi;
+  float speed_ref_cmd_mech_rad_s;      /* 当前速度环参考（机械 rad/s）。 */
+  float speed_target_mech_rad_s;       /* 目标速度（机械 rad/s）。 */
+  float speed_fdb_mech_rad_s;          /* 低通后的速度反馈（机械 rad/s）。 */
+  float speed_fdb_raw_mech_rad_s;      /* 原始 observer 速度（机械 rad/s）。 */
+  float iq_ref_cmd_a;                  /* 速度环给出的 q 轴电流给定。 */
+  uint32_t run_entry_tick_ms;          /* 进入 RUN 的时刻。 */
+  uint32_t speed_enable_tick_ms;       /* 速度环真正开始接管的时刻。 */
+  uint8_t enabled;                     /* 1=速度环已接管。 */
+} AppFoc_SpeedLoop_t;
+
+static AppFoc_SpeedLoop_t s_speed_loop = {0};
+
+static float app_foc_clampf(float x, float lo, float hi)
+{
+  if (x > hi)
+  {
+    return hi;
+  }
+  if (x < lo)
+  {
+    return lo;
+  }
+  return x;
+}
+
+static float app_foc_mech_hz_to_rad_s(float mech_hz)
+{
+  return mech_hz * 6.28318530718f;
+}
+
+static float app_foc_elec_rad_s_to_mech_rad_s(float elec_rad_s)
+{
+  return elec_rad_s / FOC_POLE_PAIRS;
+}
+
+static void app_foc_speed_loop_init(void)
+{
+  PIController_Init(&s_speed_loop.pi,
+                    FOC_SPEED_KP,
+                    FOC_SPEED_KI,
+                    FOC_SPEED_IQ_MIN_A,
+                    FOC_SPEED_IQ_MAX_A);
+  PIController_Reset(&s_speed_loop.pi);
+  s_speed_loop.speed_ref_cmd_mech_rad_s = 0.0f;
+  s_speed_loop.speed_target_mech_rad_s = 0.0f;
+  s_speed_loop.speed_fdb_mech_rad_s = 0.0f;
+  s_speed_loop.speed_fdb_raw_mech_rad_s = 0.0f;
+  s_speed_loop.iq_ref_cmd_a = 0.0f;
+  s_speed_loop.run_entry_tick_ms = 0u;
+  s_speed_loop.speed_enable_tick_ms = 0u;
+  s_speed_loop.enabled = 0u;
+}
+
+static void app_foc_speed_loop_reset(float speed_init_mech_rad_s)
+{
+  PIController_Reset(&s_speed_loop.pi);
+  s_speed_loop.speed_fdb_mech_rad_s = speed_init_mech_rad_s;
+  s_speed_loop.speed_fdb_raw_mech_rad_s = speed_init_mech_rad_s;
+  s_speed_loop.speed_ref_cmd_mech_rad_s = speed_init_mech_rad_s;
+  /* speed_target 由外部接口单独维护，这里不要覆盖，
+   * 避免 switchover 或再次进 RUN 时把用户设定速度抹掉。 */
+  s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
+  s_speed_loop.run_entry_tick_ms = HAL_GetTick();
+  s_speed_loop.speed_enable_tick_ms = 0u;
+  s_speed_loop.enabled = 0u;
+}
+
+static void app_foc_prepare_run_entry(void)
+{
+  /* OPENLOOP -> RUN 是在中频状态机内部直接改 s_state 的，
+   * 如果只依赖下一拍的 state_changed，会错过 RUN 的入口初始化。
+   * 因此这里把 RUN 首拍需要的准备收口成一个显式入口函数。 */
+  float speed_init_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
+
+  if (fabsf(speed_init_mech_rad_s) < 1.0f)
+  {
+    speed_init_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(
+        FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop));
+  }
+
+  app_foc_speed_loop_reset(speed_init_mech_rad_s);
+}
+
+static uint8_t app_foc_speed_loop_is_enabled(void)
+{
+  return s_speed_loop.enabled;
+}
+
+static void app_foc_speed_loop_step(void)
+{
+  const float dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
+  const float ramp_step = FOC_SPEED_REF_RAMP_HZ_PER_S * 6.28318530718f * dt_sec;
+  const float speed_alpha = app_foc_clampf(FOC_SPEED_FDB_FILTER_ALPHA, 0.0f, 1.0f);
+  const uint32_t now_ms = HAL_GetTick();
+  float speed_err;
+  float iq_cmd;
+
+  s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
+  s_speed_loop.speed_fdb_mech_rad_s += speed_alpha *
+      (s_speed_loop.speed_fdb_raw_mech_rad_s - s_speed_loop.speed_fdb_mech_rad_s);
+
+  if (s_speed_loop.enabled == 0u)
+  {
+    /* observer 接管后的缓冲窗口：
+     * - 保持 I/F 末端的正扭矩，避免刚入 RUN 就失去拉力；
+     * - 同时让速度反馈滤波值先稳定下来；
+     * - 真正启用速度环那一拍，再把速度目标对齐到当前反馈。 */
+    s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
+
+    if ((now_ms - s_speed_loop.run_entry_tick_ms) >= FOC_SPEED_ENABLE_DELAY_MS)
+    {
+      PIController_Reset(&s_speed_loop.pi);
+      s_speed_loop.speed_ref_cmd_mech_rad_s = s_speed_loop.speed_fdb_mech_rad_s;
+      s_speed_loop.speed_enable_tick_ms = now_ms;
+      s_speed_loop.enabled = 1u;
+    }
+    return;
+  }
+
+  speed_err = s_speed_loop.speed_target_mech_rad_s - s_speed_loop.speed_ref_cmd_mech_rad_s;
+  if (speed_err > ramp_step)
+  {
+    speed_err = ramp_step;
+  }
+  else if (speed_err < -ramp_step)
+  {
+    speed_err = -ramp_step;
+  }
+  s_speed_loop.speed_ref_cmd_mech_rad_s += speed_err;
+
+  iq_cmd = PIController_Run(&s_speed_loop.pi,
+                            s_speed_loop.speed_ref_cmd_mech_rad_s,
+                            s_speed_loop.speed_fdb_mech_rad_s,
+                            dt_sec);
+
+  if ((now_ms - s_speed_loop.speed_enable_tick_ms) < FOC_SPEED_TAKEOVER_HOLD_MS)
+  {
+    if (iq_cmd < FOC_SPEED_TAKEOVER_IQ_HOLD_A)
+    {
+      iq_cmd = FOC_SPEED_TAKEOVER_IQ_HOLD_A;
+    }
+  }
+
+  s_speed_loop.iq_ref_cmd_a = app_foc_clampf(iq_cmd,
+                                             FOC_SPEED_IQ_MIN_A,
+                                             FOC_SPEED_IQ_MAX_A);
+}
 
 /*
  * 控制驱动器使能引脚。
@@ -122,6 +283,25 @@ static void app_foc_sampling_update(void)
 static void app_foc_force_mid_output(void)
 {
   FOC_PwmModule_SetTim1Mid(&s_pwm);
+}
+
+/*
+ * 清空非运行阶段的电流环调试量。
+ *
+ * 这些状态下不会真正向电机输出 dq 控制指令，
+ * 因此把对外可见的电流环量统一清零，避免日志残留上一状态数据。
+ */
+static void app_foc_clear_current_loop_debug(void)
+{
+  s_current_loop.id_ref_a = 0.0f;
+  s_current_loop.iq_ref_a = 0.0f;
+  s_current_loop.id_meas_a = 0.0f;
+  s_current_loop.iq_meas_a = 0.0f;
+  s_current_loop.vd_cmd_v = 0.0f;
+  s_current_loop.vq_cmd_v = 0.0f;
+  s_current_loop.valpha_cmd_v = 0.0f;
+  s_current_loop.vbeta_cmd_v = 0.0f;
+  s_current_loop.theta_ctrl_rad = 0.0f;
 }
 
 /*
@@ -204,6 +384,13 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->current_loop.valpha_cmd_v = s_current_loop.valpha_cmd_v;
   snapshot->current_loop.vbeta_cmd_v = s_current_loop.vbeta_cmd_v;
   snapshot->current_loop.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
+
+  /* 速度环信息。 */
+  snapshot->speed_loop.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
+  snapshot->speed_loop.speed_target_mech_rad_s = s_speed_loop.speed_target_mech_rad_s;
+  snapshot->speed_loop.speed_fdb_mech_rad_s = s_speed_loop.speed_fdb_mech_rad_s;
+  snapshot->speed_loop.iq_ref_cmd_a = s_speed_loop.iq_ref_cmd_a;
+  snapshot->speed_loop.enabled = app_foc_speed_loop_is_enabled();
 
   /* 开环到观测器切换信息。 */
   snapshot->switchover.state = (uint8_t)s_switchover.state;
@@ -294,8 +481,6 @@ static void app_foc_run_align(void)
  */
 static void app_foc_run_openloop(void)
 {
-  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
-  ClarkePark_DQ_t vdq = {0.0f, 0.0f};
   float theta_ctrl;
   float valpha = 0.0f;
   float vbeta = 0.0f;
@@ -313,11 +498,13 @@ static void app_foc_run_openloop(void)
   theta_ctrl = FOC_SwitchoverSelectTheta(&s_switchover, &s_openloop, &s_observer);
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
+  ClarkePark_DQ_t vdq;
+  ClarkePark_AlphaBeta_t vab;
+  /* 热修复：
+   * 恢复原来的开环后期 q 轴主导输出。
+   * 上一版把 OPENLOOP 直接切成完整 dq 电流环后，
+   * observer 跟踪窗口被扰动，switchover 条件长期过不了。 */
   FOC_CurrentLoopRunOpenLoopCurrent(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
-  /* 当前调试版本先把开环阶段简化为“只保留 q 轴转矩推进”：
-   * - ALIGN 阶段只保留 Vd；
-   * - ALIGN 之后把 Vd_cmd 直接清零；
-   * 这样可以把 d 轴补偿从开环链路里拿掉，先把 q 轴推进方向验证干净。 */
   vdq.d = 0.0f;
   vdq.q = s_current_loop.vq_cmd_v;
   ClarkePark_InvPark(&vdq, theta_ctrl, &vab);
@@ -357,16 +544,17 @@ static void app_foc_medium_reset_command_defaults(void)
   s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
   s_cmd.id_ref_a = FOC_ID_REF_A;
   s_cmd.iq_ref_a = FOC_IQ_REF_A;
-  s_cmd.speed_ref_mech_rad_s = 0.0f;
+  s_cmd.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
   s_cmd.speed_loop_enable = 0u;
 }
 
 static void app_foc_medium_handle_state_machine(void)
 {
   static FOC_StateTypeDef s_prev_state = FOC_STATE_IDLE;
+  const FOC_StateTypeDef state_entry = s_state;
   const uint32_t align_ticks_target =
       (uint32_t)((FOC_ALIGN_TIME_MS * 0.001f) / FOC_TS_SEC);
-  const uint8_t state_changed = (s_state != s_prev_state) ? 1u : 0u;
+  const uint8_t state_changed = (state_entry != s_prev_state) ? 1u : 0u;
 
   app_foc_sync_feedback_from_modules();
 
@@ -466,19 +654,24 @@ static void app_foc_medium_handle_state_machine(void)
 
     case FOC_STATE_RUN:
       /* 运行阶段：
-       * 当前版本先只用 observer 角度运行；
-       * 速度环框架预留，但先不真正启用。 */
+       * - observer 角度完全接管；
+       * - 中频速度环输出 iq_ref；
+       * - 当前调试版本先只允许正扭矩，不做制动。 */
       s_cmd.theta_mode = APP_FOC_THETA_MODE_OBSERVER;
-      s_cmd.speed_loop_enable = 0u;
+      s_cmd.id_ref_a = 0.0f;
 
       if (state_changed != 0u)
       {
-        /* 刚进入 RUN 时清一次电流环，避免上一阶段积分残留。 */
-        FOC_CurrentLoopReset(&s_current_loop);
+        /* 兜底保留 RUN 入口初始化，便于未来从其他状态切入 RUN。 */
+        app_foc_prepare_run_entry();
       }
 
-      /* 最小版本里，如果 observer 丢失，先退回 OPENLOOP。
-       * 后续再细化成 RUN -> BLEND -> OPENLOOP 的分级回退。 */
+      app_foc_speed_loop_step();
+      s_cmd.speed_loop_enable = app_foc_speed_loop_is_enabled();
+      s_cmd.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
+      s_cmd.iq_ref_a = s_speed_loop.iq_ref_cmd_a;
+
+      /* 当前版本仍保留最小回退：若接管状态丢失，则退回 OPENLOOP。 */
       if (s_switchover.state != FOC_SW_STATE_OBSERVER)
       {
         FOC_OpenLoopResetRun(&s_openloop);
@@ -510,16 +703,45 @@ static void app_foc_medium_handle_state_machine(void)
   }
 
   s_cmd.state = s_state;
-  s_prev_state = s_state;
+  s_prev_state = state_entry;
 }
 
 static void app_foc_run_run(void)
 {
-  /* 运行态当前先复用开环阶段的实时控制链：
-   * - 高频仍然只负责采样、observer、选角度、电流环与 SVPWM；
-   * - 中频负责决定“什么时候进入 RUN”；
-   * - 后续挂速度环时，只需在 RUN 状态里打开 speed_loop_enable 并更新给定。 */
-  app_foc_run_openloop();
+  float theta_ctrl = 0.0f;
+  float valpha = 0.0f;
+  float vbeta = 0.0f;
+
+  app_foc_sampling_update();
+  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  if (s_fault_flags != FOC_FAULT_NONE)
+  {
+    app_foc_stop_to_fault();
+    return;
+  }
+
+  /* RUN 阶段不再推进开环角，直接使用 observer 角闭环运行。
+   * 开环变量只保留作调试参考，不再作为主控制量。 */
+  theta_ctrl = FOC_ObserverGetThetaRad(&s_observer);
+
+  FOC_CurrentLoopRunWithRef(&s_current_loop,
+                            &s_sampling,
+                            theta_ctrl,
+                            s_cmd.id_ref_a,
+                            s_cmd.iq_ref_a,
+                            &valpha,
+                            &vbeta);
+
+  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
+
+  /* observer 仍在后台更新。
+   * 这里把当前速度环给定换算成机械频率，仅用于观测器内部锁定判定的参考。 */
+  FOC_ObserverUpdate(&s_observer,
+                     &s_sampling,
+                     valpha,
+                     vbeta,
+                     theta_ctrl,
+                     s_cmd.speed_ref_mech_rad_s / 6.28318530718f);
 }
 
 void AppFoc_Init(void)
@@ -534,6 +756,7 @@ void AppFoc_Init(void)
   FOC_OpenLoopInit(&s_openloop);
   FOC_ObserverInit(&s_observer);
   FOC_SwitchoverInit(&s_switchover);
+  app_foc_speed_loop_init();
   app_foc_medium_reset_command_defaults();
   s_feedback.offset_done = 0u;
   s_feedback.observer_ready = 0u;
@@ -586,6 +809,7 @@ void AppFoc_Start(void)
   s_feedback.mech_freq_hz = 0.0f;
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
+  app_foc_speed_loop_reset(0.0f);
   s_last_medium_tick_ms = HAL_GetTick();
   app_foc_force_mid_output();
   app_foc_drive_enable(0u);
@@ -642,6 +866,7 @@ void AppFoc_HighFreqTask(void)
       FOC_StateTypeDef next_state = s_state;
 
       app_foc_force_mid_output();
+      app_foc_clear_current_loop_debug();
       app_foc_drive_enable(0u);
       FOC_SamplingModule_RunOffsetCalib(&s_sampling, &next_state);
 
@@ -667,12 +892,14 @@ void AppFoc_HighFreqTask(void)
       break;
 
     case FOC_STATE_FAULT:
+      app_foc_clear_current_loop_debug();
       app_foc_stop_to_fault();
       break;
 
     case FOC_STATE_IDLE:
     default:
       app_foc_force_mid_output();
+      app_foc_clear_current_loop_debug();
       break;
   }
 
@@ -694,6 +921,18 @@ uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot)
 {
   app_foc_fill_runtime_snapshot(snapshot);
   return (snapshot != 0) ? 1u : 0u;
+}
+
+void AppFoc_SetSpeedTargetMechHz(float mech_hz)
+{
+  float target_rad_s = app_foc_mech_hz_to_rad_s(mech_hz);
+
+  if (target_rad_s < 0.0f)
+  {
+    target_rad_s = 0.0f;
+  }
+
+  s_speed_loop.speed_target_mech_rad_s = target_rad_s;
 }
 
 uint32_t AppFoc_GetFaultFlags(void)

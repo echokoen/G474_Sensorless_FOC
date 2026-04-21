@@ -42,31 +42,37 @@ void AppDebug_Task(void)
 
 #if (FOC_DEBUG_PRINT_DETAIL != 0u)
     /*
-     * dq 电流方向诊断打印（详细模式）。
+     * RUN 接管诊断打印（详细模式）。
      *
      * 字段顺序：
-     * - foc_state    : 主状态机；
-     * - open_freq_hz : 当前开环机械频率；
-     * - id_ref       : d 轴电流给定；
-     * - iq_ref       : q 轴电流给定；
-     * - id_meas      : d 轴电流实测；
-     * - iq_meas      : q 轴电流实测。
+     * - foc_state  : 主状态机；
+     * - sw         : switchover 状态，0=openloop，1=blend，2=observer；
+     * - speed_ref  : 当前速度环机械速度给定，单位 rad/s；
+     * - speed_fdb  : observer 输出换算后的机械速度反馈，单位 rad/s；
+     * - iq_ref     : 当前 q 轴电流给定；
+     * - iq_meas    : 当前 q 轴电流实测。
+     * - theta_open : 当前开环电角；
+     * - theta_obs  : 当前 observer 电角。
      */
-    printf("id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f,vd_cmd=%.3f,vq_cmd=%.3f\r\n",
-           rt.current_loop.id_ref_a,
+    printf("foc_state=%u,sw=%u,speed_ref=%.3f,speed_fdb=%.3f,iq_ref=%.3f,iq_meas=%.3f,theta_open=%.3f,theta_obs=%.3f\r\n",
+           (unsigned int)AppFoc_GetState(),
+           (unsigned int)rt.switchover.state,
+           rt.speed_loop.speed_ref_mech_rad_s,
+           rt.speed_loop.speed_fdb_mech_rad_s,
            rt.current_loop.iq_ref_a,
-           rt.current_loop.id_meas_a,
            rt.current_loop.iq_meas_a,
-           rt.current_loop.vd_cmd_v,
-           rt.current_loop.vq_cmd_v);
+           rt.switchover.theta_open_rad,
+           rt.switchover.theta_obs_rad);
 #else
-    printf("id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f,vd_cmd=%.3f,vq_cmd=%.3f\r\n",
-           rt.current_loop.id_ref_a,
+    printf("foc_state=%u,sw=%u,speed_ref=%.3f,speed_fdb=%.3f,iq_ref=%.3f,iq_meas=%.3f,theta_open=%.3f,theta_obs=%.3f\r\n",
+           (unsigned int)AppFoc_GetState(),
+           (unsigned int)rt.switchover.state,
+           rt.speed_loop.speed_ref_mech_rad_s,
+           rt.speed_loop.speed_fdb_mech_rad_s,
            rt.current_loop.iq_ref_a,
-           rt.current_loop.id_meas_a,
            rt.current_loop.iq_meas_a,
-           rt.current_loop.vd_cmd_v,
-           rt.current_loop.vq_cmd_v);
+           rt.switchover.theta_open_rad,
+           rt.switchover.theta_obs_rad);
 #endif
   }
 }
