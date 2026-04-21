@@ -7,16 +7,29 @@
  *
  * 负责判断接管条件、执行混合过渡并输出最终控制角。
  */
-static uint8_t foc_switchover_condition(const FOC_OpenLoopData_t *openloop,
+static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
+                                        const FOC_OpenLoopData_t *openloop,
                                         const FOC_ObserverData_t *observer)
 {
   const float open_speed = FOC_OpenLoopGetElecSpeedRadPerSec(openloop);
-  const float speed_err = fabsf(FOC_ObserverGetSpeedRadPerSec(observer) - open_speed);
+  const float obs_speed = FOC_ObserverGetSpeedRadPerSec(observer);
+  const float speed_err = fabsf(obs_speed - open_speed);
   float speed_limit = fabsf(open_speed) * FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO;
 
-  if (speed_limit < 20.0f)
+  if (sw != 0)
   {
-    speed_limit = 20.0f;
+    sw->open_speed_rad_s = open_speed;
+    sw->obs_speed_rad_s = obs_speed;
+    sw->speed_err_rad_s = speed_err;
+    sw->ready_now = 0u;
+  }
+
+  /* 低速时开环电角速度本身较小，
+   * 如果只按比例门限判断，速度误差窗口会过于苛刻，
+   * 容易导致明明 observer 已经基本跟上，却迟迟不给接管。 */
+  if (speed_limit < FOC_SWITCHOVER_MAX_SPEED_ERR_MIN_RAD_S)
+  {
+    speed_limit = FOC_SWITCHOVER_MAX_SPEED_ERR_MIN_RAD_S;
   }
 
   if (FOC_OpenLoopGetFreqHz(openloop) < FOC_SWITCHOVER_MIN_MECH_FREQ_HZ)
@@ -29,9 +42,18 @@ static uint8_t foc_switchover_condition(const FOC_OpenLoopData_t *openloop,
     return 0u;
   }
 
+  /* 速度判定：
+   * 只有当 observer 速度与开环速度足够接近时，
+   * 才允许进入 switchover ready。
+   * 这样可以避免“角度偶然对上，但速度其实没跟住”导致的误接管。 */
   if (speed_err > speed_limit)
   {
     return 0u;
+  }
+
+  if (sw != 0)
+  {
+    sw->ready_now = 1u;
   }
 
   return 1u;
@@ -50,9 +72,13 @@ void FOC_SwitchoverReset(FOC_SwitchoverData_t *sw)
   }
 
   sw->observer_ready = 0u;
+  sw->ready_now = 0u;
   sw->hold_ticks = 0u;
   sw->blend_ticks = 0u;
   sw->blend_k = 0.0f;
+  sw->open_speed_rad_s = 0.0f;
+  sw->obs_speed_rad_s = 0.0f;
+  sw->speed_err_rad_s = 0.0f;
   sw->state = FOC_SW_STATE_OPENLOOP;
 }
 
@@ -64,7 +90,7 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
 
   const uint32_t hold_ticks = (uint32_t)(FOC_SWITCHOVER_HOLD_MS / (FOC_TS_SEC * 1000.0f));
   const uint32_t blend_ticks = (uint32_t)(FOC_SWITCHOVER_BLEND_MS / (FOC_TS_SEC * 1000.0f));
-  const uint8_t ready_now = foc_switchover_condition(openloop, observer);
+  const uint8_t ready_now = foc_switchover_condition(sw, openloop, observer);
 
   if ((sw == 0) || (openloop == 0) || (observer == 0))
   {

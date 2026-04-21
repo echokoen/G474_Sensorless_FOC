@@ -42,4 +42,5 @@ stm32g474_20260408\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_ha
 stm32g474_20260408\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h
 stm32g474_20260408\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 stm32g474_20260408\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
+stm32g474_20260408\app_debug.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
 stm32g474_20260408\app_debug.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

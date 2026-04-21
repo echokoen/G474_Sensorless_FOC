@@ -66,6 +66,18 @@ void AppFoc_Stop(void);
  */
 void AppFoc_HighFreqTask(void);
 
+/* 中频控制任务。
+ *
+ * 典型调用位置：main while(1) 中 1 ms 周期轮询。
+ *
+ * 职责：
+ * - 处理主状态机推进；
+ * - 处理启动/停机/故障收口这类慢流程；
+ * - 预留速度环与给定更新框架；
+ * - 高频只负责执行本拍控制。
+ */
+void AppFoc_MediumFreqTask(void);
+
 /* 获取当前 FOC 运行状态。 */
 FOC_StateTypeDef AppFoc_GetState(void);
 
@@ -84,6 +96,9 @@ uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
  * 一次性打包出来，供低频打印或上位机读取。
  */
 uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot);
+
+/* 获取当前锁存的故障原因位图。 */
+uint32_t AppFoc_GetFaultFlags(void);
 
 #ifdef __cplusplus
 }

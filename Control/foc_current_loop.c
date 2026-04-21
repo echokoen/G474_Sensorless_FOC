@@ -88,6 +88,23 @@ void FOC_CurrentLoopRunOpenLoopCurrent(FOC_CurrentLoopData_t *loop,
                                        float *valpha,
                                        float *vbeta)
 {
+  FOC_CurrentLoopRunWithRef(loop,
+                            sampling,
+                            theta_rad,
+                            FOC_ID_REF_A,
+                            FOC_IQ_REF_A,
+                            valpha,
+                            vbeta);
+}
+
+void FOC_CurrentLoopRunWithRef(FOC_CurrentLoopData_t *loop,
+                               const FOC_SamplingData_t *sampling,
+                               float theta_rad,
+                               float id_ref_a,
+                               float iq_ref_a,
+                               float *valpha,
+                               float *vbeta)
+{
   ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
   ClarkePark_DQ_t idq = {0.0f, 0.0f};
   ClarkePark_DQ_t vdq = {0.0f, 0.0f};
@@ -98,8 +115,8 @@ void FOC_CurrentLoopRunOpenLoopCurrent(FOC_CurrentLoopData_t *loop,
   }
 
   FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, &idq);
-  loop->id_ref_a = FOC_ID_REF_A;
-  loop->iq_ref_a = FOC_IQ_REF_A;
+  loop->id_ref_a = id_ref_a;
+  loop->iq_ref_a = iq_ref_a;
   vdq.d = FOC_VD_CMD_SIGN * PIController_Run(&loop->id_pi, loop->id_ref_a, idq.d, FOC_TS_SEC);
   vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&loop->iq_pi, loop->iq_ref_a, idq.q, FOC_TS_SEC);
   foc_current_loop_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);

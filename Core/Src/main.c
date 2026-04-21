@@ -121,6 +121,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    AppFoc_MediumFreqTask();
     AppDebug_Task();
   }
   /* USER CODE END 3 */

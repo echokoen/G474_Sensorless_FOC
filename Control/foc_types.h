@@ -29,6 +29,7 @@ extern "C" {
  * - OFFSET_CALIB : 电流采样零点校准；
  * - ALIGN        : 转子对齐；
  * - OPENLOOP     : 开环运行；
+ * - RUN          : 运行态（当前先保留为电流环/observer 接管后的执行态，便于后续挂速度环）；
  * - FAULT        : 故障锁定。
  */
 typedef enum
@@ -37,6 +38,7 @@ typedef enum
   FOC_STATE_OFFSET_CALIB,
   FOC_STATE_ALIGN,
   FOC_STATE_OPENLOOP,
+  FOC_STATE_RUN,
   FOC_STATE_FAULT
 } FOC_StateTypeDef;
 

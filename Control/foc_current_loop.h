@@ -41,6 +41,14 @@ void FOC_CurrentLoopRunOpenLoopCurrent(FOC_CurrentLoopData_t *loop,
                                        float *valpha,
                                        float *vbeta);
 
+void FOC_CurrentLoopRunWithRef(FOC_CurrentLoopData_t *loop,
+                               const FOC_SamplingData_t *sampling,
+                               float theta_rad,
+                               float id_ref_a,
+                               float iq_ref_a,
+                               float *valpha,
+                               float *vbeta);
+
 void FOC_CurrentLoopRunOpenLoopVoltTest(FOC_CurrentLoopData_t *loop,
                                         const FOC_SamplingData_t *sampling,
                                         float theta_rad,

@@ -20,10 +20,14 @@ typedef enum
 
 typedef struct
 {
-  uint8_t observer_ready;
-  uint32_t hold_ticks;
-  uint32_t blend_ticks;
-  float blend_k;
+  uint8_t observer_ready;   /* 最终接管就绪标志：满足保持时间后才会置位。 */
+  uint8_t ready_now;        /* 当前这一拍是否满足接管条件，主要用于调试观察。 */
+  uint32_t hold_ticks;      /* 连续满足条件的保持计数。 */
+  uint32_t blend_ticks;     /* 混合接管已经持续的 tick 数。 */
+  float blend_k;            /* 开环角 -> observer 角的混合系数。 */
+  float open_speed_rad_s;   /* 当前开环电角速度，供调试查看。 */
+  float obs_speed_rad_s;    /* 当前 observer 电角速度，供调试查看。 */
+  float speed_err_rad_s;    /* 当前速度误差绝对值，供调试查看。 */
   FOC_SwitchoverState_t state;
 } FOC_SwitchoverData_t;
 void FOC_SwitchoverInit(FOC_SwitchoverData_t *sw);

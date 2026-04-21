@@ -19,7 +19,23 @@ static float s_flux_s_alpha = 0.0f;
 static float s_flux_s_beta = 0.0f;
 static float s_theta_rad = 0.0f;
 static float s_speed_rad_s = 0.0f;
+static float s_speed_filt_rad_s = 0.0f;
 static float s_pll_integral = 0.0f;
+
+static float clampf_local(float value, float min_value, float max_value)
+{
+    if (value > max_value)
+    {
+        return max_value;
+    }
+
+    if (value < min_value)
+    {
+        return min_value;
+    }
+
+    return value;
+}
 
 /* 重置观测器状态。
  *
@@ -50,6 +66,7 @@ void FluxObserver_PLL_reset(struct FluxObserver_PLL_t *obs)
     s_flux_s_beta = 0.0f;
     s_theta_rad = 0.0f;
     s_speed_rad_s = 0.0f;
+    s_speed_filt_rad_s = 0.0f;
     s_pll_integral = 0.0f;
 }
 
@@ -80,16 +97,16 @@ static void FluxObserver_update(struct FluxObserver_PLL_t *obs)
     float flux_r_alpha = s_flux_s_alpha - Ls * ialpha;
     float flux_r_beta = s_flux_s_beta - Ls * ibeta;
 
-    /* 对磁链幅值做软限幅。
+    /* 对磁链幅值做上限约束。
      *
-     * 之前的非线性修正项在当前小电压开环下容易把磁链拉到固定方向，
-     * 表现就是 theta_flux 长时间卡在 +/-pi 附近。这里先用更朴素的
-     * 电压模型积分，再只约束幅值，不强行改变磁链方向。
+     * 这里不要每拍都把磁链硬拉到 FOC_FLUX_WB，否则幅值噪声会被转换成
+     * 角度/速度扰动。只有磁链明显超过合理范围时，才按比例缩回。
      */
     const float flux_mag = sqrtf((flux_r_alpha * flux_r_alpha) + (flux_r_beta * flux_r_beta));
-    if (flux_mag > 1.0e-6f)
+    const float flux_limit = flux_e * FOC_FLUX_LIMIT_RATIO;
+    if ((flux_mag > flux_limit) && (flux_mag > 1.0e-6f))
     {
-        const float scale = flux_e / flux_mag;
+        const float scale = flux_limit / flux_mag;
         flux_r_alpha *= scale;
         flux_r_beta *= scale;
         s_flux_s_alpha = flux_r_alpha + Ls * ialpha;
@@ -115,9 +132,10 @@ static void FluxObserver_update(struct FluxObserver_PLL_t *obs)
 static void PLL_update(struct FluxObserver_PLL_t *obs)
 {
     const float Ts = FOC_TS_SEC;
-    const float kp = 250.0f;
-    const float ki = 12000.0f;
+    const float kp = FOC_OBS_PLL_KP;
+    const float ki = FOC_OBS_PLL_KI;
     const float two_pi = 6.2831853071795864769f;
+    const float speed_alpha = clampf_local(FOC_OBS_SPEED_FILTER_ALPHA, 0.0f, 1.0f);
 
     const float sin_t = sinf(s_theta_rad);
     const float cos_t = cosf(s_theta_rad);
@@ -133,7 +151,15 @@ static void PLL_update(struct FluxObserver_PLL_t *obs)
         err /= flux_mag;
     }
     s_pll_integral += ki * err * Ts;
+    s_pll_integral = clampf_local(s_pll_integral,
+                                  -FOC_OBS_PLL_INTEGRAL_LIMIT,
+                                  FOC_OBS_PLL_INTEGRAL_LIMIT);
+
     s_speed_rad_s = s_pll_integral + kp * err;
+    s_speed_rad_s = clampf_local(s_speed_rad_s,
+                                 -FOC_OBS_SPEED_LIMIT_RAD_S,
+                                 FOC_OBS_SPEED_LIMIT_RAD_S);
+    s_speed_filt_rad_s += speed_alpha * (s_speed_rad_s - s_speed_filt_rad_s);
     s_theta_rad += s_speed_rad_s * Ts;
 
     while (s_theta_rad >= two_pi) s_theta_rad -= two_pi;
@@ -142,7 +168,7 @@ static void PLL_update(struct FluxObserver_PLL_t *obs)
     /* 把 PLL 的速度和角度写回输出。
      * 这里的角度已经被包回 [0, 2pi)，方便上层直接画图。
      */
-    obs->Espeed_O = s_speed_rad_s;
+    obs->Espeed_O = s_speed_filt_rad_s;
     obs->Etheta_O = s_theta_rad;
 }
 

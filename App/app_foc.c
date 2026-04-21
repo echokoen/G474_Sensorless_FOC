@@ -44,6 +44,46 @@ static FOC_CurrentLoopData_t s_current_loop = {0};
 static FOC_OpenLoopData_t s_openloop = {0};
 static FOC_ObserverData_t s_observer = {0};
 static FOC_SwitchoverData_t s_switchover = {0};
+static uint32_t s_fault_flags = FOC_FAULT_NONE;
+
+/* 中频任务节拍与流程常量。
+ *
+ * 说明：
+ * - 当前阶段仍以电流环 / 开环调试为主；
+ * - 因此这里先把“状态推进”和“实时执行”拆开；
+ * - 速度环只预留框架，不在当前版本真正接管。
+ */
+#define APP_FOC_MEDIUM_TASK_PERIOD_MS   (1u)
+
+typedef enum
+{
+  APP_FOC_THETA_MODE_ALIGN = 0,
+  APP_FOC_THETA_MODE_OPENLOOP,
+  APP_FOC_THETA_MODE_OBSERVER
+} AppFoc_ThetaMode_t;
+
+typedef struct
+{
+  FOC_StateTypeDef state;
+  AppFoc_ThetaMode_t theta_mode;
+  float id_ref_a;
+  float iq_ref_a;
+  float speed_ref_mech_rad_s;
+  uint8_t speed_loop_enable;
+} AppFoc_Command_t;
+
+typedef struct
+{
+  uint8_t offset_done;
+  uint8_t observer_ready;
+  uint32_t align_ticks;
+  float mech_freq_hz;
+  uint32_t fault_flags;
+} AppFoc_Feedback_t;
+
+static AppFoc_Command_t s_cmd = {0};
+static AppFoc_Feedback_t s_feedback = {0};
+static uint32_t s_last_medium_tick_ms = 0u;
 
 /*
  * 控制驱动器使能引脚。
@@ -94,6 +134,11 @@ static void app_foc_force_mid_output(void)
  */
 static void app_foc_stop_to_fault(void)
 {
+  if (s_fault_flags == FOC_FAULT_NONE)
+  {
+    /* 若外部主动停机走到这里，没有具体保护原因时保留一个兜底标记。 */
+    s_fault_flags = 0x80000000u;
+  }
   FOC_ProtectionApplyStop((FOC_StateTypeDef *)&s_state, &s_pwm);
 }
 
@@ -184,6 +229,9 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
  */
 static void app_foc_run_align(void)
 {
+  float valpha = 0.0f;
+  float vbeta = 0.0f;
+
   app_foc_force_mid_output();
 
   if (s_openloop.align_ticks == 0u)
@@ -192,23 +240,33 @@ static void app_foc_run_align(void)
   }
 
   app_foc_sampling_update();
-  if (FOC_ProtectionCheckFault(&s_sampling) != 0u)
+  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  if (s_fault_flags != FOC_FAULT_NONE)
   {
     app_foc_stop_to_fault();
     return;
   }
 
+  /* 对齐阶段改为：
+   * - 电角固定在 0；
+   * - 通过 d 轴电流闭环建立静止磁场；
+   * - q 轴给 0，避免对齐阶段引入额外转矩。
+   *
+   * 这样比固定电压对齐更柔和，也更符合当前主线已经切到电流环的结构。
+   */
   s_openloop.theta_e_rad = 0.0f;
-  FOC_PwmModule_ApplySvpwm(&s_pwm, FOC_ALIGN_VDQ_V, 0.0f, s_sampling.vbus_v);
+  FOC_CurrentLoopRunWithRef(&s_current_loop,
+                            &s_sampling,
+                            s_openloop.theta_e_rad,
+                            FOC_ALIGN_ID_REF_A,
+                            0.0f,
+                            &valpha,
+                            &vbeta);
+  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
 
   s_openloop.align_ticks++;
-  if (s_openloop.align_ticks >= (uint32_t)(0.300f / FOC_TS_SEC))
-  {
-    FOC_OpenLoopResetRun(&s_openloop);
-    FOC_SwitchoverReset(&s_switchover);
-    FOC_CurrentLoopReset(&s_current_loop);
-    s_state = FOC_STATE_OPENLOOP;
-  }
+  /* 对齐结束后的状态跳转交给中频任务处理。
+   * 高频这里只负责持续输出对齐磁场并累计 ticks。 */
 }
 
 /*
@@ -230,7 +288,8 @@ static void app_foc_run_openloop(void)
   float vbeta = 0.0f;
 
   app_foc_sampling_update();
-  if (FOC_ProtectionCheckFault(&s_sampling) != 0u)
+  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  if (s_fault_flags != FOC_FAULT_NONE)
   {
     app_foc_stop_to_fault();
     return;
@@ -258,6 +317,186 @@ static void app_foc_run_openloop(void)
                      s_openloop.mech_freq_hz);
 }
 
+static void app_foc_sync_feedback_from_modules(void)
+{
+  s_feedback.offset_done = (s_sampling.offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES) ? 1u : 0u;
+  s_feedback.observer_ready = s_switchover.observer_ready;
+  s_feedback.align_ticks = s_openloop.align_ticks;
+  s_feedback.mech_freq_hz = s_openloop.mech_freq_hz;
+  s_feedback.fault_flags = s_fault_flags;
+}
+
+static void app_foc_medium_reset_command_defaults(void)
+{
+  s_cmd.state = s_state;
+  s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
+  s_cmd.id_ref_a = FOC_ID_REF_A;
+  s_cmd.iq_ref_a = FOC_IQ_REF_A;
+  s_cmd.speed_ref_mech_rad_s = 0.0f;
+  s_cmd.speed_loop_enable = 0u;
+}
+
+static void app_foc_medium_handle_state_machine(void)
+{
+  static FOC_StateTypeDef s_prev_state = FOC_STATE_IDLE;
+  const uint32_t align_ticks_target =
+      (uint32_t)((FOC_ALIGN_TIME_MS * 0.001f) / FOC_TS_SEC);
+  const uint8_t state_changed = (s_state != s_prev_state) ? 1u : 0u;
+
+  app_foc_sync_feedback_from_modules();
+
+  /* 先给命令一个安全默认值。
+   * 各状态只覆盖自己真正需要改的字段，
+   * 这样能避免某个状态忘记赋值时残留上一状态命令。 */
+  app_foc_medium_reset_command_defaults();
+  s_cmd.state = s_state;
+
+  switch (s_state)
+  {
+    case FOC_STATE_IDLE:
+      /* 待机阶段：
+       * - 电机不运行；
+       * - 命令保持安全值；
+       * - 启动入口由 AppFoc_Start() 直接把状态切到 OFFSET_CALIB。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
+      s_cmd.speed_loop_enable = 0u;
+      s_cmd.id_ref_a = 0.0f;
+      s_cmd.iq_ref_a = 0.0f;
+      s_cmd.speed_ref_mech_rad_s = 0.0f;
+
+      if (state_changed != 0u)
+      {
+        /* 刚进入 IDLE 时做一次性清理，
+         * 不要每个 1 ms 周期都 reset，避免把状态一直洗掉。 */
+        FOC_SwitchoverReset(&s_switchover);
+        FOC_CurrentLoopReset(&s_current_loop);
+        FOC_OpenLoopResetAlign(&s_openloop);
+      }
+      break;
+
+    case FOC_STATE_OFFSET_CALIB:
+      /* 零点校准阶段：
+       * 高频里只负责累计 offset 样本；
+       * 中频里根据 offset_done 决定是否进入 ALIGN。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_ALIGN;
+      s_cmd.speed_loop_enable = 0u;
+
+      if (state_changed != 0u)
+      {
+        /* 进入零点校准时，把后续运行相关模块先清一次。 */
+        FOC_SwitchoverReset(&s_switchover);
+        FOC_CurrentLoopReset(&s_current_loop);
+        FOC_OpenLoopResetAlign(&s_openloop);
+      }
+
+      if (s_feedback.offset_done != 0u)
+      {
+        FOC_OpenLoopResetAlign(&s_openloop);
+        s_state = FOC_STATE_ALIGN;
+      }
+      break;
+
+    case FOC_STATE_ALIGN:
+      /* 对齐阶段：
+       * 高频里持续输出固定对齐磁场；
+       * 中频里只判断对齐时间是否已经足够。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_ALIGN;
+      s_cmd.speed_loop_enable = 0u;
+
+      if (state_changed != 0u)
+      {
+        FOC_OpenLoopResetAlign(&s_openloop);
+      }
+
+      if (s_feedback.align_ticks >= align_ticks_target)
+      {
+        /* 对齐结束后，把开环、电流环、接管器清一次，
+         * 保证进入 OPENLOOP 时从干净状态开始。 */
+        FOC_OpenLoopResetRun(&s_openloop);
+        FOC_SwitchoverReset(&s_switchover);
+        FOC_CurrentLoopReset(&s_current_loop);
+        s_state = FOC_STATE_OPENLOOP;
+      }
+      break;
+
+    case FOC_STATE_OPENLOOP:
+      /* 开环阶段：
+       * 高频里会一边推进开环角，一边后台更新 observer；
+       * 中频只关心 observer 是否已经真正接管成功。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
+      s_cmd.speed_loop_enable = 0u;
+
+      if (state_changed != 0u)
+      {
+        FOC_SwitchoverReset(&s_switchover);
+        FOC_CurrentLoopReset(&s_current_loop);
+        FOC_OpenLoopResetRun(&s_openloop);
+      }
+
+      if (s_switchover.state == FOC_SW_STATE_OBSERVER)
+      {
+        s_state = FOC_STATE_RUN;
+      }
+      break;
+
+    case FOC_STATE_RUN:
+      /* 运行阶段：
+       * 当前版本先只用 observer 角度运行；
+       * 速度环框架预留，但先不真正启用。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_OBSERVER;
+      s_cmd.speed_loop_enable = 0u;
+
+      if (state_changed != 0u)
+      {
+        /* 刚进入 RUN 时清一次电流环，避免上一阶段积分残留。 */
+        FOC_CurrentLoopReset(&s_current_loop);
+      }
+
+      /* 最小版本里，如果 observer 丢失，先退回 OPENLOOP。
+       * 后续再细化成 RUN -> BLEND -> OPENLOOP 的分级回退。 */
+      if (s_switchover.state != FOC_SW_STATE_OBSERVER)
+      {
+        FOC_OpenLoopResetRun(&s_openloop);
+        FOC_SwitchoverReset(&s_switchover);
+        s_state = FOC_STATE_OPENLOOP;
+      }
+      break;
+
+    case FOC_STATE_FAULT:
+      /* 故障阶段：
+       * 这里只保持安全命令；
+       * 真正的停机收口由高频里的保护逻辑统一执行。 */
+      s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
+      s_cmd.speed_loop_enable = 0u;
+      s_cmd.id_ref_a = 0.0f;
+      s_cmd.iq_ref_a = 0.0f;
+      s_cmd.speed_ref_mech_rad_s = 0.0f;
+
+      if (state_changed != 0u)
+      {
+        FOC_CurrentLoopReset(&s_current_loop);
+        FOC_SwitchoverReset(&s_switchover);
+      }
+      break;
+
+    default:
+      s_state = FOC_STATE_IDLE;
+      break;
+  }
+
+  s_cmd.state = s_state;
+  s_prev_state = s_state;
+}
+
+static void app_foc_run_run(void)
+{
+  /* 运行态当前先复用开环阶段的实时控制链：
+   * - 高频仍然只负责采样、observer、选角度、电流环与 SVPWM；
+   * - 中频负责决定“什么时候进入 RUN”；
+   * - 后续挂速度环时，只需在 RUN 状态里打开 speed_loop_enable 并更新给定。 */
+  app_foc_run_openloop();
+}
+
 void AppFoc_Init(void)
 {
   /* 初始化所有控制对象，并回到一个安全静止状态。 */
@@ -270,6 +509,14 @@ void AppFoc_Init(void)
   FOC_OpenLoopInit(&s_openloop);
   FOC_ObserverInit(&s_observer);
   FOC_SwitchoverInit(&s_switchover);
+  app_foc_medium_reset_command_defaults();
+  s_feedback.offset_done = 0u;
+  s_feedback.observer_ready = 0u;
+  s_feedback.align_ticks = 0u;
+  s_feedback.mech_freq_hz = 0.0f;
+  s_feedback.fault_flags = 0u;
+  s_fault_flags = FOC_FAULT_NONE;
+  s_last_medium_tick_ms = 0u;
 
   app_foc_force_mid_output();
   app_foc_drive_enable(0u);
@@ -307,6 +554,14 @@ void AppFoc_Start(void)
   s_sampling.offset_sum_w = 0.0f;
 
   /* 启动后先保持中点输出并关闭驱动，等待零点校准。 */
+  app_foc_medium_reset_command_defaults();
+  s_feedback.offset_done = 0u;
+  s_feedback.observer_ready = 0u;
+  s_feedback.align_ticks = 0u;
+  s_feedback.mech_freq_hz = 0.0f;
+  s_feedback.fault_flags = 0u;
+  s_fault_flags = FOC_FAULT_NONE;
+  s_last_medium_tick_ms = HAL_GetTick();
   app_foc_force_mid_output();
   app_foc_drive_enable(0u);
   s_state = FOC_STATE_OFFSET_CALIB;
@@ -331,6 +586,21 @@ void AppFoc_Stop(void)
 
   FOC_SamplingModule_SetAdc1Ready(&s_sampling, 0u);
   s_state = FOC_STATE_IDLE;
+  s_fault_flags = FOC_FAULT_NONE;
+  app_foc_medium_reset_command_defaults();
+}
+
+void AppFoc_MediumFreqTask(void)
+{
+  const uint32_t now_ms = HAL_GetTick();
+
+  if ((now_ms - s_last_medium_tick_ms) < APP_FOC_MEDIUM_TASK_PERIOD_MS)
+  {
+    return;
+  }
+
+  s_last_medium_tick_ms = now_ms;
+  app_foc_medium_handle_state_machine();
 }
 
 void AppFoc_HighFreqTask(void)
@@ -343,15 +613,21 @@ void AppFoc_HighFreqTask(void)
   switch (s_state)
   {
     case FOC_STATE_OFFSET_CALIB:
+    {
+      FOC_StateTypeDef next_state = s_state;
+
       app_foc_force_mid_output();
       app_foc_drive_enable(0u);
-      FOC_SamplingModule_RunOffsetCalib(&s_sampling, (FOC_StateTypeDef *)&s_state);
+      FOC_SamplingModule_RunOffsetCalib(&s_sampling, &next_state);
 
-      if (s_state == FOC_STATE_ALIGN)
+      /* 高频里只产生“零点校准完成”这一事实，
+       * 真正切到 ALIGN 交给中频状态机。 */
+      if (next_state == FOC_STATE_ALIGN)
       {
-        FOC_OpenLoopResetAlign(&s_openloop);
+        s_feedback.offset_done = 1u;
       }
       break;
+    }
 
     case FOC_STATE_ALIGN:
       app_foc_run_align();
@@ -359,6 +635,10 @@ void AppFoc_HighFreqTask(void)
 
     case FOC_STATE_OPENLOOP:
       app_foc_run_openloop();
+      break;
+
+    case FOC_STATE_RUN:
+      app_foc_run_run();
       break;
 
     case FOC_STATE_FAULT:
@@ -389,4 +669,9 @@ uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot)
 {
   app_foc_fill_runtime_snapshot(snapshot);
   return (snapshot != 0) ? 1u : 0u;
+}
+
+uint32_t AppFoc_GetFaultFlags(void)
+{
+  return s_fault_flags;
 }

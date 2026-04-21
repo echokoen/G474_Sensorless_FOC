@@ -7,28 +7,41 @@
  *
  * 负责基础阈值检测，并在故障发生时执行统一停机动作。
  */
-uint8_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
+uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
 {
+  uint32_t fault_flags = FOC_FAULT_NONE;
+
   if (sampling == 0)
   {
-    return 0u;
+    return FOC_FAULT_NONE;
   }
 
-  if ((sampling->vbus_v < FOC_VBUS_UNDERVOLTAGE_V) || (sampling->vbus_v > FOC_VBUS_OVERVOLTAGE_V))
+  if (sampling->vbus_v < FOC_VBUS_UNDERVOLTAGE_V)
   {
-    return 1u;
+    fault_flags |= FOC_FAULT_VBUS_UNDER;
   }
 
-  if ((fabsf(sampling->iu_a) > FOC_CURRENT_LIMIT_A) ||
-
-      (fabsf(sampling->iv_a) > FOC_CURRENT_LIMIT_A) ||
-
-      (fabsf(sampling->iw_a) > FOC_CURRENT_LIMIT_A))
+  if (sampling->vbus_v > FOC_VBUS_OVERVOLTAGE_V)
   {
-    return 1u;
+    fault_flags |= FOC_FAULT_VBUS_OVER;
   }
 
-  return 0u;
+  if (fabsf(sampling->iu_a) > FOC_CURRENT_LIMIT_A)
+  {
+    fault_flags |= FOC_FAULT_OC_U;
+  }
+
+  if (fabsf(sampling->iv_a) > FOC_CURRENT_LIMIT_A)
+  {
+    fault_flags |= FOC_FAULT_OC_V;
+  }
+
+  if (fabsf(sampling->iw_a) > FOC_CURRENT_LIMIT_A)
+  {
+    fault_flags |= FOC_FAULT_OC_W;
+  }
+
+  return fault_flags;
 }
 
 void FOC_ProtectionApplyStop(FOC_StateTypeDef *state, FOC_PwmData_t *pwm)
