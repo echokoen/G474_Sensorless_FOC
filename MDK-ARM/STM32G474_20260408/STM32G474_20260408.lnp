@@ -16,6 +16,7 @@
 "stm32g474_20260408\foc_switchover.o"
 "stm32g474_20260408\foc_protection.o"
 "stm32g474_20260408\foc_debug.o"
+"stm32g474_20260408\foc_deadtime.o"
 "stm32g474_20260408\stm32g4xx_hal_adc.o"
 "stm32g474_20260408\stm32g4xx_hal_adc_ex.o"
 "stm32g474_20260408\stm32g4xx_ll_adc.o"

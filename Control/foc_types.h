@@ -145,6 +145,9 @@ typedef struct
 {
   uint8_t state;            /* 切换状态机当前状态。 */
   uint8_t observer_ready;   /* 观测器是否达到可接管条件。 */
+  uint8_t ready_now;        /* 当前这一拍是否满足接管条件。 */
+  uint32_t hold_ticks;      /* 连续满足接管条件的保持计数。 */
+  uint32_t blend_ticks;     /* 混合接管已持续 tick 数。 */
   float blend_k;            /* 开环角和观测角的混合系数。 */
   float theta_open_rad;     /* 开环角。 */
   float theta_obs_rad;      /* 观测器角。 */
@@ -152,6 +155,7 @@ typedef struct
   float angle_err_deg;      /* 开环角与观测角误差。 */
   float open_speed_rad_s;   /* 开环电角速度。 */
   float obs_speed_rad_s;    /* 观测器估算角速度。 */
+  float speed_err_rad_s;    /* 开环/观测器速度误差绝对值。 */
 } FOC_SwitchoverSnapshot_t;
 
 /*
@@ -163,6 +167,7 @@ typedef struct
  */
 typedef struct
 {
+  FOC_StateTypeDef state;                    /* 当前 FOC 主状态。 */
   uint8_t svpwm_sector;                      /* 当前 PWM 扇区。 */
   FOC_OpenLoopSnapshot_t openloop;          /* 开环状态。 */
   FOC_ObserverSnapshot_t observer;          /* 观测器状态。 */

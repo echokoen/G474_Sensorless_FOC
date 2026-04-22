@@ -13,12 +13,14 @@ extern ADC_HandleTypeDef hadc2;
 
 static float foc_sampling_adc_to_voltage(uint16_t raw)
 {
-  return ((float)raw * FOC_ADC_VREF) / FOC_ADC_FULL_SCALE;
+  const float adc_lsb_v = FOC_ADC_VREF / FOC_ADC_FULL_SCALE;
+  return (float)raw * adc_lsb_v;
 }
 
 static float foc_sampling_current_from_adc(float vadc, float offset_v, float sign)
 {
-  return sign * ((vadc - offset_v) / (FOC_GAIN * FOC_SHUNT_OHM));
+  const float inv_gain_shunt = 1.0f / (FOC_GAIN * FOC_SHUNT_OHM);
+  return sign * (vadc - offset_v) * inv_gain_shunt;
 }
 
 static float foc_sampling_adc_to_bus_voltage(uint16_t raw)
@@ -168,9 +170,10 @@ void FOC_SamplingModule_RunOffsetCalib(FOC_SamplingData_t *sampling, FOC_StateTy
 
   if (sampling->offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES)
   {
-    sampling->iu_offset_v = sampling->offset_sum_u / (float)sampling->offset_samples;
-    sampling->iv_offset_v = sampling->offset_sum_v / (float)sampling->offset_samples;
-    sampling->iw_offset_v = sampling->offset_sum_w / (float)sampling->offset_samples;
+    const float inv_offset_samples = 1.0f / (float)sampling->offset_samples;
+    sampling->iu_offset_v = sampling->offset_sum_u * inv_offset_samples;
+    sampling->iv_offset_v = sampling->offset_sum_v * inv_offset_samples;
+    sampling->iw_offset_v = sampling->offset_sum_w * inv_offset_samples;
 
     if (state != 0)
     {

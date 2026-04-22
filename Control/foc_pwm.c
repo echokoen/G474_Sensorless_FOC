@@ -14,6 +14,7 @@ static uint8_t foc_pwm_voltage_sector(float valpha, float vbeta)
 {
   const float two_pi = 6.2831853071795864769f;
   const float sector_width = 1.0471975511965977462f;
+  const float inv_sector_width = 0.95492965855f;
   float angle = atan2f(vbeta, valpha);
 
   if (angle < 0.0f)
@@ -21,7 +22,7 @@ static uint8_t foc_pwm_voltage_sector(float valpha, float vbeta)
     angle += two_pi;
   }
   {
-    uint8_t sector = (uint8_t)(angle / sector_width) + 1u;
+    uint8_t sector = (uint8_t)(angle * inv_sector_width) + 1u;
     if (sector > 6u)
     {
       sector = 6u;
@@ -145,9 +146,12 @@ void FOC_PwmModule_ApplySvpwm(FOC_PwmData_t *pwm, float valpha, float vbeta, flo
   if (vb < vmin) vmin = vb;
   if (vc < vmin) vmin = vc;
   v_offset = 0.5f * (vmax + vmin);
-  da = 0.5f + (va - v_offset) / norm_vbus;
-  db = 0.5f + (vb - v_offset) / norm_vbus;
-  dc = 0.5f + (vc - v_offset) / norm_vbus;
+  {
+    const float inv_norm_vbus = 1.0f / norm_vbus;
+    da = 0.5f + ((va - v_offset) * inv_norm_vbus);
+    db = 0.5f + ((vb - v_offset) * inv_norm_vbus);
+    dc = 0.5f + ((vc - v_offset) * inv_norm_vbus);
+  }
   if (da < 0.0f) da = 0.0f; if (da > 1.0f) da = 1.0f;
   if (db < 0.0f) db = 0.0f; if (db > 1.0f) db = 1.0f;
   if (dc < 0.0f) dc = 0.0f; if (dc > 1.0f) dc = 1.0f;

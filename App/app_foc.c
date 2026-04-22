@@ -18,6 +18,7 @@
 #include "bsp_gpio.h"
 #include "bsp_tim.h"
 #include "foc_current_loop.h"
+#include "foc_deadtime.h"
 #include "foc_config.h"
 #include "foc_debug.h"
 #include "foc_observer.h"
@@ -42,6 +43,7 @@ extern ADC_HandleTypeDef hadc2;
 static volatile FOC_StateTypeDef s_state = FOC_STATE_IDLE;
 static FOC_SamplingData_t s_sampling = {0};
 static FOC_PwmData_t s_pwm = {0};
+static FOC_DeadtimeComp_t s_deadtime = {0};
 static FOC_DebugData_t s_debug = {0};
 static FOC_CurrentLoopData_t s_current_loop = {0};
 static FOC_OpenLoopData_t s_openloop = {0};
@@ -126,12 +128,14 @@ static float app_foc_clampf(float x, float lo, float hi)
 
 static float app_foc_mech_hz_to_rad_s(float mech_hz)
 {
-  return mech_hz * 6.28318530718f;
+  const float two_pi = 6.28318530718f;
+  return mech_hz * two_pi;
 }
 
 static float app_foc_elec_rad_s_to_mech_rad_s(float elec_rad_s)
 {
-  return elec_rad_s / FOC_POLE_PAIRS;
+  const float inv_pole_pairs = 1.0f / FOC_POLE_PAIRS;
+  return elec_rad_s * inv_pole_pairs;
 }
 
 static void app_foc_speed_loop_init(void)
@@ -179,7 +183,10 @@ static void app_foc_prepare_run_entry(void)
   }
 
   app_foc_speed_loop_reset(speed_init_mech_rad_s);
-  BSP_KEY_SetSpeedTargetHz(speed_init_mech_rad_s / 6.28318530718f);
+  {
+    const float inv_two_pi = 0.15915494309f;
+    BSP_KEY_SetSpeedTargetHz(speed_init_mech_rad_s * inv_two_pi);
+  }
 }
 
 static uint8_t app_foc_speed_loop_is_enabled(void)
@@ -271,6 +278,45 @@ static void app_foc_force_mid_output(void)
   FOC_PwmModule_SetTim1Mid(&s_pwm);
 }
 
+
+static void app_foc_apply_voltage_command(float *valpha, float *vbeta, uint8_t dt_enable)
+{
+  float valpha_cmd;
+  float vbeta_cmd;
+
+  if ((valpha == 0) || (vbeta == 0))
+  {
+    return;
+  }
+
+  valpha_cmd = *valpha;
+  vbeta_cmd = *vbeta;
+
+#if (FOC_DT_COMP_ENABLE != 0u)
+  if (dt_enable != 0u)
+  {
+    FOC_DeadtimeComp_Apply(&s_deadtime,
+                           s_sampling.vbus_v,
+                           s_sampling.iu_a,
+                           s_sampling.iv_a,
+                           s_sampling.iw_a,
+                           valpha_cmd,
+                           vbeta_cmd,
+                           &valpha_cmd,
+                           &vbeta_cmd);
+  }
+  else
+#endif
+  {
+    FOC_DeadtimeComp_Reset(&s_deadtime);
+  }
+
+  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha_cmd, vbeta_cmd, s_sampling.vbus_v);
+  *valpha = valpha_cmd;
+  *vbeta = vbeta_cmd;
+}
+
+
 /*
  * 清空非运行阶段的电流环调试量。
  *
@@ -323,6 +369,7 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   }
 
   /* PWM / 扇区信息。 */
+  snapshot->state = s_state;
   snapshot->svpwm_sector = s_pwm.svpwm_sector;
 
   /* 开环信息。 */
@@ -381,6 +428,9 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   /* 开环到观测器切换信息。 */
   snapshot->switchover.state = (uint8_t)s_switchover.state;
   snapshot->switchover.observer_ready = s_switchover.observer_ready;
+  snapshot->switchover.ready_now = s_switchover.ready_now;
+  snapshot->switchover.hold_ticks = s_switchover.hold_ticks;
+  snapshot->switchover.blend_ticks = s_switchover.blend_ticks;
   snapshot->switchover.blend_k = s_switchover.blend_k;
   snapshot->switchover.theta_open_rad = s_openloop.theta_e_rad;
   snapshot->switchover.theta_obs_rad = s_observer.theta_rad;
@@ -388,6 +438,7 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->switchover.angle_err_deg = s_observer.angle_err_deg;
   snapshot->switchover.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
   snapshot->switchover.obs_speed_rad_s = s_observer.speed_rad_s;
+  snapshot->switchover.speed_err_rad_s = s_switchover.speed_err_rad_s;
 }
 
 /*
@@ -446,7 +497,7 @@ static void app_foc_run_align(void)
   s_current_loop.vbeta_cmd_v = vab.beta;
   valpha = s_current_loop.valpha_cmd_v;
   vbeta = s_current_loop.vbeta_cmd_v;
-  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
+  app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_ALIGN);
 
   s_openloop.align_ticks++;
   /* 对齐结束后的状态跳转交给中频任务处理。
@@ -505,7 +556,7 @@ static void app_foc_run_openloop(void)
   FOC_CurrentLoopRunOpenLoopVf(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
 #endif
 
-  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
+  app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_OPENLOOP);
 
   FOC_ObserverUpdate(&s_observer,
                      &s_sampling,
@@ -538,8 +589,9 @@ static void app_foc_medium_handle_state_machine(void)
 {
   static FOC_StateTypeDef s_prev_state = FOC_STATE_IDLE;
   const FOC_StateTypeDef state_entry = s_state;
+  const float inv_ctrl_period_sec = 1.0f / FOC_TS_SEC;
   const uint32_t align_ticks_target =
-      (uint32_t)((FOC_ALIGN_TIME_MS * 0.001f) / FOC_TS_SEC);
+      (uint32_t)((FOC_ALIGN_TIME_MS * 0.001f) * inv_ctrl_period_sec);
   const uint8_t state_changed = (state_entry != s_prev_state) ? 1u : 0u;
 
   app_foc_sync_feedback_from_modules();
@@ -718,7 +770,7 @@ static void app_foc_run_run(void)
                             &valpha,
                             &vbeta);
 
-  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha, vbeta, s_sampling.vbus_v);
+  app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 
   /* observer 仍在后台更新。
    * 这里把当前速度环给定换算成机械频率，仅用于观测器内部锁定判定的参考。 */
@@ -727,7 +779,7 @@ static void app_foc_run_run(void)
                      valpha,
                      vbeta,
                      theta_ctrl,
-                     s_cmd.speed_ref_mech_rad_s / 6.28318530718f);
+                     s_cmd.speed_ref_mech_rad_s * 0.15915494309f);
 }
 
 void AppFoc_Init(void)
@@ -737,6 +789,7 @@ void AppFoc_Init(void)
 
   FOC_SamplingModule_Init(&s_sampling);
   FOC_PwmModule_Init(&s_pwm);
+  FOC_DeadtimeComp_Init(&s_deadtime);
   FOC_DebugModule_Init(&s_debug);
   FOC_CurrentLoopInit(&s_current_loop);
   FOC_OpenLoopInit(&s_openloop);
@@ -777,6 +830,7 @@ void AppFoc_Start(void)
 
   /* 每次启动都要把内部状态重新清空。 */
   FOC_ObserverReset(&s_observer);
+  FOC_DeadtimeComp_Reset(&s_deadtime);
   FOC_SwitchoverReset(&s_switchover);
   FOC_CurrentLoopReset(&s_current_loop);
   FOC_OpenLoopResetAlign(&s_openloop);
@@ -822,6 +876,7 @@ void AppFoc_Stop(void)
   FOC_SamplingModule_SetAdc1Ready(&s_sampling, 0u);
   s_state = FOC_STATE_IDLE;
   s_fault_flags = FOC_FAULT_NONE;
+  FOC_DeadtimeComp_Reset(&s_deadtime);
   app_foc_medium_reset_command_defaults();
 }
 

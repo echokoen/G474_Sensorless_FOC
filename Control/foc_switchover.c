@@ -88,8 +88,9 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
 {
 #if (FOC_SWITCHOVER_ENABLE != 0u)
 
-  const uint32_t hold_ticks = (uint32_t)(FOC_SWITCHOVER_HOLD_MS / (FOC_TS_SEC * 1000.0f));
-  const uint32_t blend_ticks = (uint32_t)(FOC_SWITCHOVER_BLEND_MS / (FOC_TS_SEC * 1000.0f));
+  const float inv_ctrl_period_ms = 1.0f / (FOC_TS_SEC * 1000.0f);
+  const uint32_t hold_ticks = (uint32_t)(FOC_SWITCHOVER_HOLD_MS * inv_ctrl_period_ms);
+  const uint32_t blend_ticks = (uint32_t)(FOC_SWITCHOVER_BLEND_MS * inv_ctrl_period_ms);
   const uint8_t ready_now = foc_switchover_condition(sw, openloop, observer);
 
   if ((sw == 0) || (openloop == 0) || (observer == 0))
@@ -142,7 +143,10 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
     {
       sw->observer_ready = 1u;
       sw->blend_ticks++;
-      sw->blend_k = (float)sw->blend_ticks / (float)blend_ticks;
+      {
+        const float inv_blend_ticks = 1.0f / (float)blend_ticks;
+        sw->blend_k = (float)sw->blend_ticks * inv_blend_ticks;
+      }
     }
 
     else

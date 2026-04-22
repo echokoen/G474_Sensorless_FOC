@@ -2,9 +2,46 @@
 #include "app_foc.h"
 #include "foc_config.h"
 #include "main.h"
+#include "foc_switchover.h"
 #include "stm32g4xx_hal.h"
 #include <math.h>
 #include <stdio.h>
+
+static const char *app_debug_state_name(FOC_StateTypeDef state)
+{
+  switch (state)
+  {
+    case FOC_STATE_IDLE:
+      return "IDLE";
+    case FOC_STATE_OFFSET_CALIB:
+      return "OFFSET_CALIB";
+    case FOC_STATE_ALIGN:
+      return "ALIGN";
+    case FOC_STATE_OPENLOOP:
+      return "OPENLOOP";
+    case FOC_STATE_RUN:
+      return "RUN";
+    case FOC_STATE_FAULT:
+      return "FAULT";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+static const char *app_debug_switchover_state_name(uint8_t state)
+{
+  switch ((FOC_SwitchoverState_t)state)
+  {
+    case FOC_SW_STATE_OPENLOOP:
+      return "OPENLOOP";
+    case FOC_SW_STATE_BLEND:
+      return "BLEND";
+    case FOC_SW_STATE_OBSERVER:
+      return "OBSERVER";
+    default:
+      return "UNKNOWN";
+  }
+}
 
 /*
  * 调试任务实现。
@@ -52,21 +89,41 @@ void AppDebug_Task(void)
      * - id_meas   : 当前 d 轴电流实测；
      * - iq_meas   : 当前 q 轴电流实测。
      */
-    printf("speed_ref=%.3f,speed_fdb=%.3f,id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f\r\n",
-           rt.speed_loop.speed_ref_mech_rad_s,
-           rt.speed_loop.speed_fdb_mech_rad_s,
-           rt.current_loop.id_ref_a,
-           rt.current_loop.iq_ref_a,
-           rt.current_loop.id_meas_a,
-           rt.current_loop.iq_meas_a);
+    printf("state=%s(%u),sw_state=%s(%u),obs_ready=%u,ready_now=%u,hold=%lu,blend_ticks=%lu,blend_k=%.3f,ang_err_deg=%.3f,theta_open=%.3f,theta_obs=%.3f,theta_ctrl=%.3f,open_spd=%.3f,obs_spd=%.3f,spd_err=%.3f\r\n",
+           app_debug_state_name(rt.state),
+           (unsigned int)rt.state,
+           app_debug_switchover_state_name(rt.switchover.state),
+           (unsigned int)rt.switchover.state,
+           (unsigned int)rt.switchover.observer_ready,
+           (unsigned int)rt.switchover.ready_now,
+           (unsigned long)rt.switchover.hold_ticks,
+           (unsigned long)rt.switchover.blend_ticks,
+           rt.switchover.blend_k,
+           rt.switchover.angle_err_deg,
+           rt.switchover.theta_open_rad,
+           rt.switchover.theta_obs_rad,
+           rt.switchover.theta_ctrl_rad,
+           rt.switchover.open_speed_rad_s,
+           rt.switchover.obs_speed_rad_s,
+           rt.switchover.speed_err_rad_s);
 #else
-    printf("speed_ref=%.3f,speed_fdb=%.3f,id_ref=%.3f,iq_ref=%.3f,id_meas=%.3f,iq_meas=%.3f\r\n",
-           rt.speed_loop.speed_ref_mech_rad_s,
-           rt.speed_loop.speed_fdb_mech_rad_s,
-           rt.current_loop.id_ref_a,
-           rt.current_loop.iq_ref_a,
-           rt.current_loop.id_meas_a,
-           rt.current_loop.iq_meas_a);
+    printf("state=%s(%u),sw_state=%s(%u),obs_ready=%u,ready_now=%u,hold=%lu,blend_ticks=%lu,blend_k=%.3f,ang_err_deg=%.3f,theta_open=%.3f,theta_obs=%.3f,theta_ctrl=%.3f,open_spd=%.3f,obs_spd=%.3f,spd_err=%.3f\r\n",
+           app_debug_state_name(rt.state),
+           (unsigned int)rt.state,
+           app_debug_switchover_state_name(rt.switchover.state),
+           (unsigned int)rt.switchover.state,
+           (unsigned int)rt.switchover.observer_ready,
+           (unsigned int)rt.switchover.ready_now,
+           (unsigned long)rt.switchover.hold_ticks,
+           (unsigned long)rt.switchover.blend_ticks,
+           rt.switchover.blend_k,
+           rt.switchover.angle_err_deg,
+           rt.switchover.theta_open_rad,
+           rt.switchover.theta_obs_rad,
+           rt.switchover.theta_ctrl_rad,
+           rt.switchover.open_speed_rad_s,
+           rt.switchover.obs_speed_rad_s,
+           rt.switchover.speed_err_rad_s);
 #endif
   }
 }

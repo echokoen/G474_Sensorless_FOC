@@ -50,6 +50,7 @@ stm32g474_20260408\app_foc.o: ../Drivers/BSP/bsp_tim.h
 stm32g474_20260408\app_foc.o: ..\Control\foc_current_loop.h
 stm32g474_20260408\app_foc.o: ../Core/Inc/PMSM_Control_Core/Clarke_Park.h
 stm32g474_20260408\app_foc.o: ..\Control\foc_sampling.h
+stm32g474_20260408\app_foc.o: ..\Control\foc_deadtime.h
 stm32g474_20260408\app_foc.o: ..\Control\foc_debug.h
 stm32g474_20260408\app_foc.o: ..\Control\foc_pwm.h
 stm32g474_20260408\app_foc.o: ..\Control\foc_observer.h

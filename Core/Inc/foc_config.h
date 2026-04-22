@@ -25,6 +25,18 @@ extern "C" {
 #define FOC_SVPWM_MIN_CCR            (20u)       /* 留一点边界余量，避免比较值贴死到 0。 */
 #define FOC_SVPWM_MAX_CCR            (FOC_PWM_ARR - 20u) /* 留一点边界余量，避免比较值贴死到 ARR。 */
 
+/* ==================== 死区补偿参数 ==================== */
+//电流方向补偿 + 过零平滑 + 
+#define FOC_DT_COMP_ENABLE            (1u)      /* 死区补偿总开关，1=启用，0=关闭。 */
+#define FOC_DT_COMP_ENABLE_ALIGN      (1u)      /* ALIGN阶段死区补偿开关，建议调试初期可先关闭。 */
+#define FOC_DT_COMP_ENABLE_OPENLOOP   (0u)      /* OPENLOOP阶段死区补偿开关。 */
+#define FOC_DT_COMP_ENABLE_RUN        (1u)      /* RUN阶段死区补偿开关，通常这是最主要的补偿阶段。 */
+#define FOC_DT_COMP_SIGN              (1.0f)    /* 死区补偿方向，若补偿后效果变差可改为-1.0f。 */
+#define FOC_DT_COMP_CURR_TH_A         (0.30f)   /* 电流过零平滑阈值，单位A。 */
+#define FOC_DT_COMP_K_BASE            (0.016f)  /* 死区补偿基准系数，按 K = Td / Ts 公式估算。 */
+#define FOC_DT_COMP_K_MAX             (0.020f)  /* 死区补偿系数上限，防止补偿过大。 */
+#define FOC_DT_COMP_MIN_VBUS_V        (8.0f)    /* 最小母线电压门限，低于该值时不进行补偿。 */
+
 /* ==================== 电机参数 ==================== */
 
 #define FOC_POLE_PAIRS               (4.0f)      /* 电机极对数，用于机械角速度和电角速度之间的换算。 */
