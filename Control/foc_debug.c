@@ -14,11 +14,15 @@ void FOC_DebugModule_Init(FOC_DebugData_t *debug_data)
 
   debug_data->snapshot.seq = 0u;
   debug_data->snapshot.sec = 0u;
+  debug_data->snapshot.pwm_sec = 0u;
   debug_data->snapshot.pair = 0u;
   debug_data->snapshot.fb = 0u;
   debug_data->snapshot.ccru = 0u;
   debug_data->snapshot.ccrv = 0u;
   debug_data->snapshot.ccrw = 0u;
+  debug_data->snapshot.t1 = 0.0f;
+  debug_data->snapshot.t2 = 0.0f;
+  debug_data->snapshot.t0 = 0.0f;
   debug_data->snapshot.win1 = 0u;
   debug_data->snapshot.win2 = 0u;
   debug_data->snapshot.smp = 0u;
@@ -43,11 +47,15 @@ void FOC_DebugModule_UpdateSnapshot(FOC_DebugData_t *debug_data,
   const uint32_t next_seq = debug_data->snapshot.seq + 1u;
   debug_data->snapshot.seq = next_seq;
   debug_data->snapshot.sec = sampling->sample_sector;
+  debug_data->snapshot.pwm_sec = pwm->svpwm_sector;
   debug_data->snapshot.pair = sampling->trusted_current_pair;
   debug_data->snapshot.fb = pwm->adc_trigger_fallback;
   debug_data->snapshot.ccru = pwm->ccr_u;
   debug_data->snapshot.ccrv = pwm->ccr_v;
   debug_data->snapshot.ccrw = pwm->ccr_w;
+  debug_data->snapshot.t1 = pwm->svpwm_t1;
+  debug_data->snapshot.t2 = pwm->svpwm_t2;
+  debug_data->snapshot.t0 = pwm->svpwm_t0;
   debug_data->snapshot.win1 = pwm->adc_win1_ccr;
   debug_data->snapshot.win2 = pwm->adc_win2_ccr;
   debug_data->snapshot.smp = pwm->adc_sample_ccr;

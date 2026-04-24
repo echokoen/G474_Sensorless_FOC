@@ -59,8 +59,8 @@ void AppDebug_Task(void)
 {
   static uint32_t last_dbg_tick = 0u;
 
-  /* 约 5 ms 打印一次，避免串口输出过于频繁。 */
-  if ((HAL_GetTick() - last_dbg_tick) < 5u)
+  /* PWM 诊断打印降速到约 20 ms，避免串口拖慢系统。 */
+  if ((HAL_GetTick() - last_dbg_tick) < 20u)
   {
     return;
   }
@@ -89,41 +89,47 @@ void AppDebug_Task(void)
      * - id_meas   : 当前 d 轴电流实测；
      * - iq_meas   : 当前 q 轴电流实测。
      */
-    printf("state=%s(%u),sw_state=%s(%u),obs_ready=%u,ready_now=%u,hold=%lu,blend_ticks=%lu,blend_k=%.3f,ang_err_deg=%.3f,theta_open=%.3f,theta_obs=%.3f,theta_ctrl=%.3f,open_spd=%.3f,obs_spd=%.3f,spd_err=%.3f\r\n",
+    printf("state=%s(%u),sw_state=%s(%u),sample_sector=%u,pwm_sector=%u,pair=%u,ccr_u=%u,ccr_v=%u,ccr_w=%u,smp=%u,win1=%u,win2=%u,t1=%.1f,t2=%.1f,t0=%.1f,raw_u=%u,raw_v=%u,raw_w=%u\r\n",
            app_debug_state_name(rt.state),
            (unsigned int)rt.state,
            app_debug_switchover_state_name(rt.switchover.state),
            (unsigned int)rt.switchover.state,
-           (unsigned int)rt.switchover.observer_ready,
-           (unsigned int)rt.switchover.ready_now,
-           (unsigned long)rt.switchover.hold_ticks,
-           (unsigned long)rt.switchover.blend_ticks,
-           rt.switchover.blend_k,
-           rt.switchover.angle_err_deg,
-           rt.switchover.theta_open_rad,
-           rt.switchover.theta_obs_rad,
-           rt.switchover.theta_ctrl_rad,
-           rt.switchover.open_speed_rad_s,
-           rt.switchover.obs_speed_rad_s,
-           rt.switchover.speed_err_rad_s);
+           (unsigned int)dbg.sec,
+           (unsigned int)dbg.pwm_sec,
+           (unsigned int)dbg.pair,
+           (unsigned int)dbg.ccru,
+           (unsigned int)dbg.ccrv,
+           (unsigned int)dbg.ccrw,
+           (unsigned int)dbg.smp,
+           (unsigned int)dbg.win1,
+           (unsigned int)dbg.win2,
+           dbg.t1,
+           dbg.t2,
+           dbg.t0,
+           (unsigned int)dbg.rawu,
+           (unsigned int)dbg.rawv,
+           (unsigned int)dbg.raww);
 #else
-    printf("state=%s(%u),sw_state=%s(%u),obs_ready=%u,ready_now=%u,hold=%lu,blend_ticks=%lu,blend_k=%.3f,ang_err_deg=%.3f,theta_open=%.3f,theta_obs=%.3f,theta_ctrl=%.3f,open_spd=%.3f,obs_spd=%.3f,spd_err=%.3f\r\n",
+    printf("state=%s(%u),sw_state=%s(%u),sample_sector=%u,pwm_sector=%u,pair=%u,ccr_u=%u,ccr_v=%u,ccr_w=%u,smp=%u,win1=%u,win2=%u,t1=%.1f,t2=%.1f,t0=%.1f,raw_u=%u,raw_v=%u,raw_w=%u\r\n",
            app_debug_state_name(rt.state),
            (unsigned int)rt.state,
            app_debug_switchover_state_name(rt.switchover.state),
            (unsigned int)rt.switchover.state,
-           (unsigned int)rt.switchover.observer_ready,
-           (unsigned int)rt.switchover.ready_now,
-           (unsigned long)rt.switchover.hold_ticks,
-           (unsigned long)rt.switchover.blend_ticks,
-           rt.switchover.blend_k,
-           rt.switchover.angle_err_deg,
-           rt.switchover.theta_open_rad,
-           rt.switchover.theta_obs_rad,
-           rt.switchover.theta_ctrl_rad,
-           rt.switchover.open_speed_rad_s,
-           rt.switchover.obs_speed_rad_s,
-           rt.switchover.speed_err_rad_s);
+           (unsigned int)dbg.sec,
+           (unsigned int)dbg.pwm_sec,
+           (unsigned int)dbg.pair,
+           (unsigned int)dbg.ccru,
+           (unsigned int)dbg.ccrv,
+           (unsigned int)dbg.ccrw,
+           (unsigned int)dbg.smp,
+           (unsigned int)dbg.win1,
+           (unsigned int)dbg.win2,
+           dbg.t1,
+           dbg.t2,
+           dbg.t0,
+           (unsigned int)dbg.rawu,
+           (unsigned int)dbg.rawv,
+           (unsigned int)dbg.raww);
 #endif
   }
 }

@@ -5,7 +5,7 @@
 
 /* PWM / SVPWM 实现。
  *
- * 负责扇区判断、CCR 更新、采样触发点维护以及 SVPWM 输出。
+ * 负责扇区判断、T1/T2/T0 计算、CCR 更新以及采样触发点维护。
  */
 
 extern TIM_HandleTypeDef htim1;
@@ -13,7 +13,6 @@ extern TIM_HandleTypeDef htim1;
 static uint8_t foc_pwm_voltage_sector(float valpha, float vbeta)
 {
   const float two_pi = 6.2831853071795864769f;
-  const float sector_width = 1.0471975511965977462f;
   const float inv_sector_width = 0.95492965855f;
   float angle = atan2f(vbeta, valpha);
 
@@ -31,6 +30,85 @@ static uint8_t foc_pwm_voltage_sector(float valpha, float vbeta)
   }
 }
 
+static uint8_t foc_pwm_trusted_pair_from_sector(uint8_t sector)
+{
+  switch (sector)
+  {
+    case 1u:
+    case 6u:
+      return 1u;  /* VW */
+
+    case 2u:
+    case 3u:
+      return 2u;  /* UW */
+
+    case 4u:
+    case 5u:
+    default:
+      return 3u;  /* UV */
+  }
+}
+
+static void foc_pwm_get_sector_times(float valpha,
+                                     float vbeta,
+                                     float vbus_v,
+                                     uint8_t sector,
+                                     float *t1,
+                                     float *t2,
+                                     float *t0)
+{
+  const float two_pi = 6.2831853071795864769f;
+  const float pi_over_3 = 1.0471975511965977462f;
+  const float sqrt3 = 1.7320508075688772f;
+  const float pwm_period = (float)FOC_PWM_ARR;
+  const float norm_vbus = (vbus_v > 0.1f) ? vbus_v : 24.0f;
+  float angle = atan2f(vbeta, valpha);
+  float theta_sector;
+  float vref;
+  float local_t1;
+  float local_t2;
+  float local_t0;
+
+  if (angle < 0.0f)
+  {
+    angle += two_pi;
+  }
+
+  theta_sector = angle - ((float)(sector - 1u) * pi_over_3);
+  if (theta_sector < 0.0f)
+  {
+    theta_sector = 0.0f;
+  }
+  else if (theta_sector > pi_over_3)
+  {
+    theta_sector = pi_over_3;
+  }
+
+  vref = sqrtf((valpha * valpha) + (vbeta * vbeta));
+  local_t1 = pwm_period * sqrt3 * (vref / norm_vbus) * sinf(pi_over_3 - theta_sector);
+  local_t2 = pwm_period * sqrt3 * (vref / norm_vbus) * sinf(theta_sector);
+
+  if (local_t1 < 0.0f) local_t1 = 0.0f;
+  if (local_t2 < 0.0f) local_t2 = 0.0f;
+
+  if ((local_t1 + local_t2) > pwm_period)
+  {
+    const float scale = pwm_period / (local_t1 + local_t2);
+    local_t1 *= scale;
+    local_t2 *= scale;
+  }
+
+  local_t0 = pwm_period - local_t1 - local_t2;
+  if (local_t0 < 0.0f)
+  {
+    local_t0 = 0.0f;
+  }
+
+  if (t1) *t1 = local_t1;
+  if (t2) *t2 = local_t2;
+  if (t0) *t0 = local_t0;
+}
+
 static uint16_t foc_pwm_clamp_ccr(int32_t ccr)
 {
   if (ccr < (int32_t)FOC_SVPWM_MIN_CCR) return FOC_SVPWM_MIN_CCR;
@@ -43,6 +121,7 @@ static void foc_pwm_update_adc_trigger_ccr(FOC_PwmData_t *pwm)
   uint16_t ccr_x = pwm->ccr_u;
   uint16_t ccr_y = pwm->ccr_v;
   const uint16_t center = FOC_PWM_HALF_ARR;
+  const int32_t sample_ccr = (int32_t)FOC_PWM_HALF_ARR + (int32_t)FOC_ADC_TRIG_TEST_OFFSET_CCR;
 
   switch (pwm->svpwm_sector)
   {
@@ -75,9 +154,9 @@ static void foc_pwm_update_adc_trigger_ccr(FOC_PwmData_t *pwm)
 
   pwm->adc_win1_ccr = (ccr_x >= center) ? (uint16_t)(ccr_x - center) : (uint16_t)(center - ccr_x);
   pwm->adc_win2_ccr = (ccr_y >= center) ? (uint16_t)(ccr_y - center) : (uint16_t)(center - ccr_y);
-  pwm->adc_sample_ccr = FOC_PWM_HALF_ARR;
+  pwm->adc_sample_ccr = foc_pwm_clamp_ccr(sample_ccr);
   pwm->adc_trigger_fallback = 0u;
-  pwm->midpoint_sampling = 1u;
+  pwm->midpoint_sampling = (FOC_ADC_TRIG_TEST_OFFSET_CCR == 0) ? 1u : 0u;
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, pwm->adc_sample_ccr);
 }
 
@@ -92,6 +171,9 @@ void FOC_PwmModule_Init(FOC_PwmData_t *pwm)
   pwm->svpwm_da = 0.5f;
   pwm->svpwm_db = 0.5f;
   pwm->svpwm_dc = 0.5f;
+  pwm->svpwm_t1 = 0.0f;
+  pwm->svpwm_t2 = 0.0f;
+  pwm->svpwm_t0 = (float)FOC_PWM_ARR;
   pwm->ccr_u = FOC_PWM_HALF_ARR;
   pwm->ccr_v = FOC_PWM_HALF_ARR;
   pwm->ccr_w = FOC_PWM_HALF_ARR;
@@ -112,10 +194,17 @@ void FOC_PwmModule_SetTim1Mid(FOC_PwmData_t *pwm)
   pwm->ccr_u = FOC_PWM_HALF_ARR;
   pwm->ccr_v = FOC_PWM_HALF_ARR;
   pwm->ccr_w = FOC_PWM_HALF_ARR;
+  pwm->svpwm_da = 0.5f;
+  pwm->svpwm_db = 0.5f;
+  pwm->svpwm_dc = 0.5f;
+  pwm->svpwm_t1 = 0.0f;
+  pwm->svpwm_t2 = 0.0f;
+  pwm->svpwm_t0 = (float)FOC_PWM_ARR;
   pwm->adc_win1_ccr = 0u;
   pwm->adc_win2_ccr = 0u;
   pwm->adc_sample_ccr = FOC_ADC_TRIG_FALLBACK_CCR;
   pwm->adc_trigger_fallback = 1u;
+  pwm->midpoint_sampling = 1u;
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm->ccr_u);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm->ccr_v);
   __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm->ccr_w);
@@ -124,41 +213,84 @@ void FOC_PwmModule_SetTim1Mid(FOC_PwmData_t *pwm)
 
 void FOC_PwmModule_ApplySvpwm(FOC_PwmData_t *pwm, float valpha, float vbeta, float vbus_v)
 {
-  const float sqrt3 = 1.7320508075688772f;
-  const float va = valpha;
-  const float vb = (-0.5f * valpha) + (0.5f * sqrt3 * vbeta);
-  const float vc = (-0.5f * valpha) - (0.5f * sqrt3 * vbeta);
-  float vmax = va;
-  float vmin = va;
+  const float pwm_period = (float)FOC_PWM_ARR;
+  uint8_t sector;
+  float t1;
+  float t2;
+  float t0;
+  float half_t0;
+  float ta;
+  float tb;
+  float tc;
   float da;
   float db;
   float dc;
-  const float norm_vbus = (vbus_v > 0.1f) ? vbus_v : 24.0f;
-  float v_offset;
 
   if (pwm == 0)
   {
     return;
   }
 
-  if (vb > vmax) vmax = vb;
-  if (vc > vmax) vmax = vc;
-  if (vb < vmin) vmin = vb;
-  if (vc < vmin) vmin = vc;
-  v_offset = 0.5f * (vmax + vmin);
+  sector = foc_pwm_voltage_sector(valpha, vbeta);
+  foc_pwm_get_sector_times(valpha, vbeta, vbus_v, sector, &t1, &t2, &t0);
+  half_t0 = 0.5f * t0;
+
+  /* 中心对齐七段式等效分配。 */
+  switch (sector)
   {
-    const float inv_norm_vbus = 1.0f / norm_vbus;
-    da = 0.5f + ((va - v_offset) * inv_norm_vbus);
-    db = 0.5f + ((vb - v_offset) * inv_norm_vbus);
-    dc = 0.5f + ((vc - v_offset) * inv_norm_vbus);
+    case 1u:
+      ta = t1 + t2 + half_t0;
+      tb = t2 + half_t0;
+      tc = half_t0;
+      break;
+
+    case 2u:
+      ta = t1 + half_t0;
+      tb = t1 + t2 + half_t0;
+      tc = half_t0;
+      break;
+
+    case 3u:
+      ta = half_t0;
+      tb = t1 + t2 + half_t0;
+      tc = t2 + half_t0;
+      break;
+
+    case 4u:
+      ta = half_t0;
+      tb = t1 + half_t0;
+      tc = t1 + t2 + half_t0;
+      break;
+
+    case 5u:
+      ta = t2 + half_t0;
+      tb = half_t0;
+      tc = t1 + t2 + half_t0;
+      break;
+
+    case 6u:
+    default:
+      ta = t1 + t2 + half_t0;
+      tb = half_t0;
+      tc = t1 + half_t0;
+      break;
   }
+
+  da = ta / pwm_period;
+  db = tb / pwm_period;
+  dc = tc / pwm_period;
+
   if (da < 0.0f) da = 0.0f; if (da > 1.0f) da = 1.0f;
   if (db < 0.0f) db = 0.0f; if (db > 1.0f) db = 1.0f;
   if (dc < 0.0f) dc = 0.0f; if (dc > 1.0f) dc = 1.0f;
-  pwm->svpwm_sector = foc_pwm_voltage_sector(valpha, vbeta);
+
+  pwm->svpwm_sector = sector;
   pwm->svpwm_da = da;
   pwm->svpwm_db = db;
   pwm->svpwm_dc = dc;
+  pwm->svpwm_t1 = t1;
+  pwm->svpwm_t2 = t2;
+  pwm->svpwm_t0 = t0;
   pwm->ccr_u = foc_pwm_clamp_ccr((int32_t)(da * (float)FOC_PWM_ARR));
   pwm->ccr_v = foc_pwm_clamp_ccr((int32_t)(db * (float)FOC_PWM_ARR));
   pwm->ccr_w = foc_pwm_clamp_ccr((int32_t)(dc * (float)FOC_PWM_ARR));
@@ -192,8 +324,6 @@ void FOC_PwmModule_GetSamplingWindowDebug(const FOC_PwmData_t *pwm,
                                    uint8_t *used_fallback,
                                    uint8_t *trusted_pair)
 {
-  (void)trusted_pair;
-
   if (pwm == 0)
   {
     return;
@@ -207,4 +337,5 @@ void FOC_PwmModule_GetSamplingWindowDebug(const FOC_PwmData_t *pwm,
   if (win2) *win2 = pwm->adc_win2_ccr;
   if (sample_ccr) *sample_ccr = pwm->adc_sample_ccr;
   if (used_fallback) *used_fallback = pwm->adc_trigger_fallback;
+  if (trusted_pair) *trusted_pair = foc_pwm_trusted_pair_from_sector(pwm->svpwm_sector);
 }

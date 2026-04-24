@@ -22,6 +22,7 @@ extern "C" {
 #define FOC_ADC_TRIG_MARGIN_CCR      (140u)      /* 动态采样窗口两侧预留边界，第一轮仍保留原宏名与入口。 */
 #define FOC_ADC_TRIG_MIN_WINDOW_CCR  (320u)      /* 动态采样最小窗口阈值，当前主线仍维持固定中点采样。 */
 #define FOC_ADC_TRIG_FALLBACK_CCR    (FOC_PWM_HALF_ARR) /* 没有足够宽窗口时回退到保守采样点。 */
+#define FOC_ADC_TRIG_TEST_OFFSET_CCR (0)         /* 采样点 A/B 实验偏移量；0=中点，负值=提前，正值=滞后。 */
 #define FOC_SVPWM_MIN_CCR            (20u)       /* 留一点边界余量，避免比较值贴死到 0。 */
 #define FOC_SVPWM_MAX_CCR            (FOC_PWM_ARR - 20u) /* 留一点边界余量，避免比较值贴死到 ARR。 */
 

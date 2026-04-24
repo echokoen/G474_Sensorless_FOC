@@ -55,12 +55,16 @@ typedef enum
 typedef struct
 {
   uint32_t seq;   /* 快照序号。若使用双写保护，稳定快照通常为偶数。 */
-  uint8_t sec;    /* 当前 SVPWM 扇区。 */
+  uint8_t sec;    /* 当前采样模块使用的扇区。 */
+  uint8_t pwm_sec;/* 当前 PWM 输出扇区。 */
   uint8_t pair;   /* 当前可信两相组合：1=VW，2=UW，3=UV。 */
   uint8_t fb;     /* 采样点是否走回退策略。 */
   uint16_t ccru;  /* U 相 PWM 比较值。 */
   uint16_t ccrv;  /* V 相 PWM 比较值。 */
   uint16_t ccrw;  /* W 相 PWM 比较值。 */
+  float t1;       /* 当前扇区第一个有效矢量作用时间。 */
+  float t2;       /* 当前扇区第二个有效矢量作用时间。 */
+  float t0;       /* 当前零矢量总作用时间。 */
   uint16_t win1;  /* 第一个有效采样窗口宽度。 */
   uint16_t win2;  /* 第二个有效采样窗口宽度。 */
   uint16_t smp;   /* 注入 ADC 触发点，通常对应 CCR4。 */

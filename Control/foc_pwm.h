@@ -16,6 +16,9 @@ typedef struct
   float svpwm_da;
   float svpwm_db;
   float svpwm_dc;
+  float svpwm_t1;
+  float svpwm_t2;
+  float svpwm_t0;
   uint16_t ccr_u;
   uint16_t ccr_v;
   uint16_t ccr_w;
