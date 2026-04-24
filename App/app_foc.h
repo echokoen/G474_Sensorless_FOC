@@ -18,6 +18,13 @@ extern "C" {
  * 1. 对外统一主控入口；
  * 2. 高频任务执行路径集中；
  * 3. 调试信息统一从快照读取，避免大量零散 getter。
+ *
+ * 使用方式：
+ * - main 初始化外设后调用 AppFoc_Init()；
+ * - 用户按键或命令触发 AppFoc_Start()；
+ * - ADC 注入完成中断里调用 AppFoc_HighFreqTask()；
+ * - 主循环或 1ms tick 中调用 AppFoc_MediumFreqTask()；
+ * - AppDebug_Task() 通过快照接口读取状态，不直接碰内部对象。
  */
 
 /* 初始化应用层控制对象。

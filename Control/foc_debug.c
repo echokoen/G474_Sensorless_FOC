@@ -17,6 +17,8 @@ void FOC_DebugModule_Init(FOC_DebugData_t *debug_data)
   debug_data->snapshot.pwm_sec = 0u;
   debug_data->snapshot.pair = 0u;
   debug_data->snapshot.fb = 0u;
+  debug_data->snapshot.hold = 0u;
+  debug_data->snapshot.dyn = 0u;
   debug_data->snapshot.ccru = 0u;
   debug_data->snapshot.ccrv = 0u;
   debug_data->snapshot.ccrw = 0u;
@@ -44,12 +46,19 @@ void FOC_DebugModule_UpdateSnapshot(FOC_DebugData_t *debug_data,
     return;
   }
 
+  /* seq 使用奇偶保护：
+   * - 写入开始时置为奇数；
+   * - 字段全部写完后置为偶数；
+   * - 读取侧只有看到前后 seq 相同且为偶数，才认为快照一致。
+   */
   const uint32_t next_seq = debug_data->snapshot.seq + 1u;
   debug_data->snapshot.seq = next_seq;
   debug_data->snapshot.sec = sampling->sample_sector;
   debug_data->snapshot.pwm_sec = pwm->svpwm_sector;
   debug_data->snapshot.pair = sampling->trusted_current_pair;
   debug_data->snapshot.fb = pwm->adc_trigger_fallback;
+  debug_data->snapshot.hold = sampling->used_hold_last_current;
+  debug_data->snapshot.dyn = pwm->adc_dynamic_sampling;
   debug_data->snapshot.ccru = pwm->ccr_u;
   debug_data->snapshot.ccrv = pwm->ccr_v;
   debug_data->snapshot.ccrw = pwm->ccr_w;
@@ -79,12 +88,14 @@ uint8_t FOC_DebugModule_GetSnapshot(const FOC_DebugData_t *debug_data, FOC_Debug
   for (;;)
   {
     const uint32_t seq1 = debug_data->snapshot.seq;
+    /* 高频侧正在写入时 seq 为奇数，低频侧等待下一次稳定快照。 */
     if ((seq1 & 1u) != 0u)
     {
       continue;
     }
 
     *snapshot = debug_data->snapshot;
+    /* 复制前后 seq 不变，说明没有读到半包数据。 */
     if ((seq1 == debug_data->snapshot.seq) && ((debug_data->snapshot.seq & 1u) == 0u))
     {
       return 1u;

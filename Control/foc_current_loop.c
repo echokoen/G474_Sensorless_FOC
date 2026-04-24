@@ -10,6 +10,10 @@
 
 static void foc_current_loop_limit_vector(float *x, float *y, float limit)
 {
+  /* dq 电压矢量限幅。
+   * 注意这里不是 d/q 分别限幅，而是限制 sqrt(vd^2+vq^2)。
+   * 这样可以保持电压矢量方向不变，只缩小幅值。
+   */
   if ((x == 0) || (y == 0) || (limit <= 0.0f))
   {
     return;
@@ -52,6 +56,7 @@ void FOC_CurrentLoopReset(FOC_CurrentLoopData_t *loop)
   loop->iq_ref_a = FOC_IQ_REF_A;
   loop->id_meas_a = 0.0f;
   loop->iq_meas_a = 0.0f;
+  loop->vd_pi_v = 0.0f;
   loop->vd_cmd_v = 0.0f;
   loop->vq_cmd_v = 0.0f;
   loop->valpha_cmd_v = 0.0f;
@@ -65,6 +70,11 @@ void FOC_CurrentLoopMeasureDQ(FOC_CurrentLoopData_t *loop,
                               ClarkePark_AlphaBeta_t *iab,
                               ClarkePark_DQ_t *idq)
 {
+  /* 单独测量 id/iq，便于：
+   * - 电流环正常运行前做方向测试；
+   * - 开环/电压测试模式下仍然能打印 id/iq；
+   * - observer 调试时确认采样和坐标变换是否一致。
+   */
   ClarkePark_AlphaBeta_t local_ab = {0.0f, 0.0f};
   ClarkePark_DQ_t local_dq = {0.0f, 0.0f};
 
@@ -114,13 +124,132 @@ void FOC_CurrentLoopRunWithRef(FOC_CurrentLoopData_t *loop,
     return;
   }
 
+  /* 1. 三相电流变换到当前控制角下的 dq 电流。 */
   FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, &idq);
   loop->id_ref_a = id_ref_a;
   loop->iq_ref_a = iq_ref_a;
+
+  /* 2. d/q 两轴独立 PI。
+   * FOC_VD_CMD_SIGN / FOC_VQ_CMD_SIGN 用于适配实际硬件极性。
+   */
   vdq.d = FOC_VD_CMD_SIGN * PIController_Run(&loop->id_pi, loop->id_ref_a, idq.d, FOC_TS_SEC);
+  loop->vd_pi_v = vdq.d;
+  vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&loop->iq_pi, loop->iq_ref_a, idq.q, FOC_TS_SEC);
+
+  /* 3. dq 电压矢量总幅值限幅，避免超出母线可输出范围。 */
+  foc_current_loop_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
+
+  /* 4. 转回 alpha/beta，交给 PWM 模块。 */
+  ClarkePark_InvPark(&vdq, theta_rad, &vab);
+  loop->vd_cmd_v = vdq.d;
+  loop->vq_cmd_v = vdq.q;
+  loop->valpha_cmd_v = vab.alpha;
+  loop->vbeta_cmd_v = vab.beta;
+  if (valpha) *valpha = loop->valpha_cmd_v;
+  if (vbeta) *vbeta = loop->vbeta_cmd_v;
+}
+
+void FOC_CurrentLoopRunIqOnly(FOC_CurrentLoopData_t *loop,
+                              const FOC_SamplingData_t *sampling,
+                              float theta_rad,
+                              float iq_ref_a,
+                              float *valpha,
+                              float *vbeta)
+{
+  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
+  ClarkePark_DQ_t idq = {0.0f, 0.0f};
+  ClarkePark_DQ_t vdq = {0.0f, 0.0f};
+
+  if ((loop == 0) || (sampling == 0))
+  {
+    return;
+  }
+
+  FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, &idq);
+  loop->id_ref_a = FOC_ID_REF_A;
+  loop->iq_ref_a = iq_ref_a;
+  PIController_Reset(&loop->id_pi);
+  loop->vd_pi_v = 0.0f;
+  vdq.d = 0.0f;
   vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&loop->iq_pi, loop->iq_ref_a, idq.q, FOC_TS_SEC);
   foc_current_loop_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
   ClarkePark_InvPark(&vdq, theta_rad, &vab);
+  loop->vd_cmd_v = 0.0f;
+  loop->vq_cmd_v = vdq.q;
+  loop->valpha_cmd_v = vab.alpha;
+  loop->vbeta_cmd_v = vab.beta;
+  if (valpha) *valpha = loop->valpha_cmd_v;
+  if (vbeta) *vbeta = loop->vbeta_cmd_v;
+}
+
+void FOC_CurrentLoopRunDSoft(FOC_CurrentLoopData_t *loop,
+                             const FOC_SamplingData_t *sampling,
+                             float theta_rad,
+                             float id_ref_a,
+                             float iq_ref_a,
+                             float d_axis_enable_k,
+                             float vd_cmd_limit_v,
+                             float *valpha,
+                             float *vbeta)
+{
+  ClarkePark_AlphaBeta_t vab = {0.0f, 0.0f};
+  ClarkePark_DQ_t idq = {0.0f, 0.0f};
+  ClarkePark_DQ_t vdq = {0.0f, 0.0f};
+  float vd_pi = 0.0f;
+  float k = d_axis_enable_k;
+
+  if ((loop == 0) || (sampling == 0))
+  {
+    return;
+  }
+
+  if (k < 0.0f)
+  {
+    k = 0.0f;
+  }
+  else if (k > 1.0f)
+  {
+    k = 1.0f;
+  }
+
+  FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, &idq);
+  loop->id_ref_a = id_ref_a;
+  loop->iq_ref_a = iq_ref_a;
+
+  if (k <= 0.0f)
+  {
+    /* k=0 时保持当前稳定的 Iq-only 行为，冻结 d 轴积分。 */
+    PIController_Reset(&loop->id_pi);
+    vd_pi = 0.0f;
+  }
+  else
+  {
+    vd_pi = FOC_VD_CMD_SIGN * PIController_Run(&loop->id_pi,
+                                               loop->id_ref_a,
+                                               idq.d,
+                                               FOC_TS_SEC);
+  }
+
+  loop->vd_pi_v = vd_pi;
+
+  vdq.d = vd_pi * k;
+  if (vdq.d > vd_cmd_limit_v)
+  {
+    vdq.d = vd_cmd_limit_v;
+  }
+  else if (vdq.d < -vd_cmd_limit_v)
+  {
+    vdq.d = -vd_cmd_limit_v;
+  }
+
+  vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&loop->iq_pi,
+                                             loop->iq_ref_a,
+                                             idq.q,
+                                             FOC_TS_SEC);
+
+  foc_current_loop_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
+  ClarkePark_InvPark(&vdq, theta_rad, &vab);
+
   loop->vd_cmd_v = vdq.d;
   loop->vq_cmd_v = vdq.q;
   loop->valpha_cmd_v = vab.alpha;
@@ -146,6 +275,7 @@ void FOC_CurrentLoopRunOpenLoopVoltTest(FOC_CurrentLoopData_t *loop,
   FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, 0);
   loop->id_ref_a = 0.0f;
   loop->iq_ref_a = 0.0f;
+  loop->vd_pi_v = vdq.d;
   foc_current_loop_limit_vector(&vdq.d, &vdq.q, FOC_DQ_VOLT_LIMIT);
   ClarkePark_InvPark(&vdq, theta_rad, &vab);
   loop->vd_cmd_v = vdq.d;
@@ -170,6 +300,7 @@ void FOC_CurrentLoopRunOpenLoopVf(FOC_CurrentLoopData_t *loop,
   FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, 0);
   loop->id_ref_a = FOC_ID_REF_A;
   loop->iq_ref_a = FOC_IQ_REF_A;
+  loop->vd_pi_v = FOC_OPENLOOP_VDQ_V;
   loop->vd_cmd_v = FOC_OPENLOOP_VDQ_V;
   loop->vq_cmd_v = 0.0f;
   loop->valpha_cmd_v = FOC_OPENLOOP_VDQ_V * cosf(theta_rad);

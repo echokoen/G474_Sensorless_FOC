@@ -5,6 +5,20 @@ extern "C" {
 #endif
 #include <stdint.h>
 
+/* FOC 全局配置文件。
+ *
+ * 这个文件集中放所有“会影响控制行为”的工程参数：
+ * - 硬件采样比例、PWM 周期、ADC 换算；
+ * - 电机参数 Rs/Ls/磁链/极对数；
+ * - 电流环、速度环、observer、switchover 的调试参数；
+ * - 保护阈值和调试打印开关。
+ *
+ * 调参原则：
+ * 1. 先确认硬件参数正确，再调控制器参数；
+ * 2. 改宏值等价于改控制行为，必须带着日志验证；
+ * 3. 采样、SVPWM、observer 的问题不要混在一起调。
+ */
+
 /* ==================== 硬件与采样参数 ==================== */
 
 #define FOC_TS_SEC                   (6.25e-5f)  /* 控制周期，单位秒，必须与实际中断周期一致。 */
@@ -23,15 +37,21 @@ extern "C" {
 #define FOC_ADC_TRIG_MIN_WINDOW_CCR  (320u)      /* 动态采样最小窗口阈值，当前主线仍维持固定中点采样。 */
 #define FOC_ADC_TRIG_FALLBACK_CCR    (FOC_PWM_HALF_ARR) /* 没有足够宽窗口时回退到保守采样点。 */
 #define FOC_ADC_TRIG_TEST_OFFSET_CCR (0)         /* 采样点 A/B 实验偏移量；0=中点，负值=提前，正值=滞后。 */
+#define FOC_ADC_DYNAMIC_SAMPLE_ENABLE (1u)       /* 1=按可信两相低边公共导通窗口动态移动 ADC 触发点。 */
+#define FOC_ADC_HOLD_LAST_ON_FALLBACK (1u)       /* 1=OPENLOOP/RUN 中窗口不足时沿用上一拍有效电流。 */
+#define FOC_ADC_SAMPLE_MIN_CCR        (FOC_ADC_TRIG_MARGIN_CCR) /* ADC触发点允许的最小CCR，避开计数边界。 */
+#define FOC_ADC_SAMPLE_MAX_CCR        (FOC_PWM_ARR - FOC_ADC_TRIG_MARGIN_CCR) /* ADC触发点允许的最大CCR。 */
 #define FOC_SVPWM_MIN_CCR            (20u)       /* 留一点边界余量，避免比较值贴死到 0。 */
 #define FOC_SVPWM_MAX_CCR            (FOC_PWM_ARR - 20u) /* 留一点边界余量，避免比较值贴死到 ARR。 */
 
 /* ==================== 死区补偿参数 ==================== */
-//电流方向补偿 + 过零平滑 + 
+/* 死区补偿用于修正功率管上下桥互锁时间带来的相电压误差。
+ * 当前实现按电流方向补偿，并在过零附近做平滑，避免符号抖动。
+ */
 #define FOC_DT_COMP_ENABLE            (1u)      /* 死区补偿总开关，1=启用，0=关闭。 */
-#define FOC_DT_COMP_ENABLE_ALIGN      (1u)      /* ALIGN阶段死区补偿开关，建议调试初期可先关闭。 */
+#define FOC_DT_COMP_ENABLE_ALIGN      (0u)      /* ALIGN阶段死区补偿开关，当前隔离实验临时关闭。 */
 #define FOC_DT_COMP_ENABLE_OPENLOOP   (0u)      /* OPENLOOP阶段死区补偿开关。 */
-#define FOC_DT_COMP_ENABLE_RUN        (1u)      /* RUN阶段死区补偿开关，通常这是最主要的补偿阶段。 */
+#define FOC_DT_COMP_ENABLE_RUN        (0u)      /* RUN阶段死区补偿开关，当前隔离实验临时关闭。 */
 #define FOC_DT_COMP_SIGN              (1.0f)    /* 死区补偿方向，若补偿后效果变差可改为-1.0f。 */
 #define FOC_DT_COMP_CURR_TH_A         (0.30f)   /* 电流过零平滑阈值，单位A。 */
 #define FOC_DT_COMP_K_BASE            (0.016f)  /* 死区补偿基准系数，按 K = Td / Ts 公式估算。 */
@@ -39,6 +59,12 @@ extern "C" {
 #define FOC_DT_COMP_MIN_VBUS_V        (8.0f)    /* 最小母线电压门限，低于该值时不进行补偿。 */
 
 /* ==================== 电机参数 ==================== */
+/* 这些参数会直接进入 observer、PI 参数估算和速度换算。
+ * 如果 Rs/Ls/Flux/PolePairs 不准确，最明显的影响通常是：
+ * - observer 角度/速度漂移；
+ * - 低速锁相困难；
+ * - 电流环带宽和实际响应不一致。
+ */
 
 #define FOC_POLE_PAIRS               (4.0f)      /* 电机极对数，用于机械角速度和电角速度之间的换算。 */
 #define FOC_RS_OHM                   (0.53f)     /* 定子电阻，单位欧姆，影响电压降补偿和磁链积分。 */
@@ -47,6 +73,10 @@ extern "C" {
 #define FOC_FLUX_LIMIT_RATIO         (1.50f)     /* 磁链只在超过目标幅值该倍数时限幅，避免每拍硬归一化。 */
 
 /* ==================== 电流环参数 ==================== */
+/* 电流环是当前工程最核心的闭环。
+ * 真实链路为：
+ * id/iq ref -> PI -> 电压极性映射 -> dq 矢量限幅 -> InvPark -> SVPWM。
+ */
 
 #define FOC_ID_REF_A                 (0.0f)      /* d 轴电流参考，第一阶段先不给励磁电流。 */
 #define FOC_IQ_REF_A                 (1.0f)      /* q 轴电流参考，增加低速开环跟随转矩。 */
@@ -62,6 +92,10 @@ extern "C" {
 #define FOC_DQ_TEST_VQ_V             (0.0f)      /* dq 电压注入测试的 q 轴电压。 */
 
 /* ==================== 启动 / 对齐 / 开环参数 ==================== */
+/* 启动流程相关参数。
+ * OFFSET_CALIB 完成后进入 ALIGN，对齐结束后进入 OPENLOOP，
+ * OPENLOOP 中 observer 后台跟踪，满足条件后切入 RUN。
+ */
 
 #define FOC_ALIGN_TIME_MS            (300u)      /* 对齐阶段持续时间，单位 ms，过短可能导致转子未吸稳就进入开环。 */
 #define FOC_ALIGN_ID_REF_A           (0.8f)      /* 对齐阶段 d 轴电流给定，固定角度下用小电流把转子吸到对齐位置。 */
@@ -81,47 +115,73 @@ extern "C" {
 #endif
 
 /* ==================== observer 参数 ==================== */
+/* FluxObserver_PLL 相关参数。
+ * KP/KI 主要影响 PLL 跟踪速度和速度估计噪声；
+ * THETA_COMP 用于补偿观测器角与控制角之间的固定相位偏差。
+ */
 
-#define FOC_OBS_ENABLE_FREQ_HZ       (8.0f)      /* 机械频率太低时，不对 observer 做锁定判定。 */
+#define FOC_OBS_ENABLE_FREQ_HZ       (10.0f)      /* 机械频率太低时，不对 observer 做锁定判定。 */
 #define FOC_OBS_LOCK_ERR_DEG         (25.0f)     /* 角差在这个范围内，才认为有机会锁住。 */
 #define FOC_OBS_LOCK_HOLD_MS         (200u)      /* 条件持续这么久，才把状态置为 locked。 */
-#define FOC_OBS_THETA_COMP_RAD       (2.7239f)    /* observer 原始角度补偿；当前验证阶段先在原补偿基础上加 pi，检查半圈相位偏置是否为主因。 */
+#define FOC_OBS_THETA_COMP_RAD       (2.8286f)    /* observer 角度补偿：原补偿 -0.4177 + pi，再按当前 ang≈+6deg 增加 0.1047rad。 */
 #define FOC_OBS_PLL_KP               (180.0f)    /* PLL 比例增益，调小可降低速度尖峰。 */
 #define FOC_OBS_PLL_KI               (6000.0f)   /* PLL 积分增益，调小可降低低速抖动。 */
-#define FOC_OBS_PLL_INTEGRAL_LIMIT   (700.0f)    /* PLL 积分项限幅，单位 rad/s。 */
-#define FOC_OBS_SPEED_LIMIT_RAD_S    (1200.0f)    /* observer 电角速度输出限幅。 */
+#define FOC_OBS_PLL_INTEGRAL_LIMIT   (1800.0f)    /* PLL 积分项限幅，单位 rad/s。 */
+#define FOC_OBS_SPEED_LIMIT_RAD_S    (2200.0f)    /* observer 电角速度输出限幅。 */
 #define FOC_OBS_SPEED_FILTER_ALPHA   (0.20f)     /* observer 速度一阶滤波系数，0~1，越小越平滑。 */
 
 /* ==================== switchover 参数 ==================== */
+/* 开环到 observer 接管参数。
+ * 接管不是只看角度，还会同时看速度误差和连续保持时间，
+ * 目的是避免 observer 瞬间“看起来对了”就贸然切入 RUN。
+ */
 
 #define FOC_SWITCHOVER_ENABLE                   (1u)    /* 1=允许 observer 接管控制角，0=只后台观察。 */
-#define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ         (6.0f)  /* 机械频率达到该值后，才允许进入接管判定。 */
-#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG        (8.0f)  /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
-#define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO      (0.50f) /* observer 电角速度与开环电角速度允许的相对误差。 */
+#define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ         (10.0f)  /* 机械频率达到该值后，才允许进入接管判定。 */
+#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG        (10.0f) /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
+#define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO      (0.60f) /* observer 电角速度与开环电角速度允许的相对误差。 */
 #define FOC_SWITCHOVER_MAX_SPEED_ERR_MIN_RAD_S  (20.0f) /* 速度误差下限门限：低速时也保留一个最小绝对误差窗口。 */
-#define FOC_SWITCHOVER_HOLD_MS                  (100u)  /* 接管条件连续满足这么久，才进入混合阶段。 */
-#define FOC_SWITCHOVER_BLEND_MS                 (300u)  /* 从开环角平滑过渡到 observer 角所用时间。 */
+#define FOC_SWITCHOVER_HOLD_MS                  (250u)  /* 接管条件连续满足这么久，才进入混合阶段。 */
+#define FOC_SWITCHOVER_BLEND_MS                 (800u)  /* 从开环角平滑过渡到 observer 角所用时间。 */
+#define FOC_SWITCHOVER_BLEND_MAX_ANGLE_ERR_DEG  (15.0f) /* BLEND 中放宽角度门限，避免单拍角度毛刺打回。 */
+#define FOC_SWITCHOVER_BLEND_FAIL_HOLD_TICKS    (5u)    /* BLEND 中连续失败这么多拍，才真正退回 OPENLOOP。 */
 
 /* ==================== 速度环参数 ==================== */
+/* 速度环当前是 RUN 阶段的外环，只输出 iq_ref。
+ * 调试阶段先保守限幅，避免 observer 刚接管时速度环把 q 轴电流拉得过猛。
+ */
 
 #define FOC_SPEED_REF_MECH_HZ        (12.0f)     /* RUN 阶段默认机械速度目标，当前版本进入 RUN 时先不直接跳到该值。 */
 #define FOC_SPEED_KP                 (0.08f)     /* 速度环比例增益，先保守一些，避免 observer 接管后 iq_ref 抽动。 */
 #define FOC_SPEED_KI                 (2.0f)      /* 速度环积分增益，第一版只求能稳，不求快。 */
-#define FOC_SPEED_IQ_MIN_A           (0.0f)      /* 当前速度环先只允许正扭矩，不做主动制动。 */
-#define FOC_SPEED_IQ_MAX_A           (4.0f)      /* 速度环输出的 q 轴电流上限。 */
-#define FOC_SPEED_ENABLE_DELAY_MS    (200u)      /* 进入 RUN 后先 observer-only hold 一小段，再真正开启速度环。 */
+#define FOC_SPEED_IQ_MIN_A           (0.5f)      /* RUN 后保留最小正扭矩底座，避免速度环把 iq_ref 拉得过低。 */
+#define FOC_SPEED_IQ_MAX_A           (7.0f)      /* 速度环输出的 q 轴电流上限，短时放开到 7A 验证速度余量。 */
+#define FOC_SPEED_ENABLE_DELAY_MS    (500u)      /* 进入 RUN 后先 observer-only hold 一小段，再真正开启速度环。 */
 #define FOC_SPEED_REF_RAMP_HZ_PER_S  (3.0f)      /* 速度给定斜率；当前默认目标由接管瞬间的实际速度初始化。 */
 #define FOC_SPEED_FDB_FILTER_ALPHA   (0.08f)     /* RUN 阶段速度反馈一阶低通系数。 */
 #define FOC_SPEED_TAKEOVER_IQ_HOLD_A (0.30f)     /* 速度环刚接入后的最小正扭矩底座，避免 iq_ref 立即掉空。 */
 #define FOC_SPEED_TAKEOVER_HOLD_MS   (300u)      /* 速度环刚接入后的底座保持时间。 */
+#define FOC_RUN_IQ_ONLY_HOLD_MS      (2000u)     /* RUN 后 Iq-only 保持时间，独立于速度环延时。 */
+#define FOC_SPEED_IQ_SLEW_A_PER_S    (1.0f)      /* 隔离实验：速度环 iq_ref 最大变化率，避免输出突变。 */
+#define FOC_SPEED_LOOP_ENABLE_IN_RUN (1u)        /* 隔离实验：1=RUN 阶段启用速度环，只让它输出 iq_ref。 */
+#define FOC_RUN_FORCE_IQ_ONLY        (0u)        /* 0=允许进入 d 轴软接管实验；1=RUN 阶段一直只跑 q 轴 PI。 */
+#define FOC_RUN_D_AXIS_SOFT_ENABLE   (1u)        /* 1=RUN 阶段 d 轴 PI 通过 d_axis_enable_k 软接管。 */
+#define FOC_RUN_D_AXIS_RAMP_MS       (1500u)     /* Iq-only hold 后，d_axis_enable_k 从 0 爬升到 1 的时间。 */
+#define FOC_RUN_D_AXIS_VD_LIMIT_V    (1.0f)      /* d 轴软接管第一版 vd_cmd 限幅，防止 d 轴突然注入过大。 */
 
 /* ==================== 保护参数 ==================== */
+/* 软件保护阈值。
+ * 注意：软件保护依赖 ADC 采样结果，不能替代硬件过流保护。
+ */
 
 #define FOC_CURRENT_LIMIT_A          (15.0f)     /* 单相电流限值，触发后直接进入故障态。 */
 #define FOC_VBUS_UNDERVOLTAGE_V      (10.0f)     /* 母线太低时，SVPWM 已经不再可信。 */
 #define FOC_VBUS_OVERVOLTAGE_V       (30.0f)     /* 母线太高时，先保护再说。 */
 
 /* ==================== 调试参数 ==================== */
+/* 调试打印开关。
+ * 打印过多会占用串口和 CPU，排查实时问题时要注意打印周期。
+ */
 
 #define FOC_DEBUG_PRINT_DETAIL       (0u)        /* 0=精简打印，1=打印采样与电流环完整调试量。 */
 #ifdef __cplusplus

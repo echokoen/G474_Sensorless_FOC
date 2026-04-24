@@ -15,6 +15,9 @@ extern "C" {
  * - 高频任务只负责写快照；
  * - 低频调试任务只负责读快照；
  * - 严禁在这里反向修改控制对象。
+ *
+ * 如果要新增打印字段，优先从 AppFoc_GetRuntimeSnapshot()
+ * 或 AppFoc_GetDebugSnapshot() 中取，避免直接访问控制模块内部变量。
  */
 void AppDebug_Task(void);
 

@@ -62,28 +62,28 @@ static uint32_t s_fault_flags = FOC_FAULT_NONE;
 
 typedef enum
 {
-  APP_FOC_THETA_MODE_ALIGN = 0,
-  APP_FOC_THETA_MODE_OPENLOOP,
-  APP_FOC_THETA_MODE_OBSERVER
+  APP_FOC_THETA_MODE_ALIGN = 0,  /* 固定对齐角。 */
+  APP_FOC_THETA_MODE_OPENLOOP,   /* 使用开环轨迹角。 */
+  APP_FOC_THETA_MODE_OBSERVER    /* 使用 observer 估算角。 */
 } AppFoc_ThetaMode_t;
 
 typedef struct
 {
-  FOC_StateTypeDef state;
-  AppFoc_ThetaMode_t theta_mode;
-  float id_ref_a;
-  float iq_ref_a;
-  float speed_ref_mech_rad_s;
-  uint8_t speed_loop_enable;
+  FOC_StateTypeDef state;              /* 中频状态机给高频侧的目标状态。 */
+  AppFoc_ThetaMode_t theta_mode;       /* 本状态期望使用的角度来源。 */
+  float id_ref_a;                      /* d 轴电流给定。 */
+  float iq_ref_a;                      /* q 轴电流给定。 */
+  float speed_ref_mech_rad_s;          /* 机械速度给定，供 RUN/observer 参考。 */
+  uint8_t speed_loop_enable;           /* 速度环是否已经允许接管 iq_ref。 */
 } AppFoc_Command_t;
 
 typedef struct
 {
-  uint8_t offset_done;
-  uint8_t observer_ready;
-  uint32_t align_ticks;
-  float mech_freq_hz;
-  uint32_t fault_flags;
+  uint8_t offset_done;       /* 零点校准是否完成。 */
+  uint8_t observer_ready;    /* switchover 是否认为 observer 可接管。 */
+  uint32_t align_ticks;      /* 对齐阶段已累计的高频 tick。 */
+  float mech_freq_hz;        /* 当前开环机械频率。 */
+  uint32_t fault_flags;      /* 最近一次故障位图。 */
 } AppFoc_Feedback_t;
 
 static AppFoc_Command_t s_cmd = {FOC_STATE_IDLE, APP_FOC_THETA_MODE_ALIGN, 0.0f, 0.0f, 0.0f, 0u};
@@ -112,6 +112,9 @@ typedef struct
 } AppFoc_SpeedLoop_t;
 
 static AppFoc_SpeedLoop_t s_speed_loop = {0};
+static uint32_t s_run_iq_only_until_ms = 0u;
+static uint8_t s_run_entry_prepared = 0u;
+static uint8_t s_last_dt_enable = 0u;
 
 static float app_foc_clampf(float x, float lo, float hi)
 {
@@ -183,6 +186,13 @@ static void app_foc_prepare_run_entry(void)
   }
 
   app_foc_speed_loop_reset(speed_init_mech_rad_s);
+
+  /* RUN 入口必须在切换到 RUN 之前完成。
+   * 否则高频任务可能先进入 RUN，而 Iq-only hold 尚未生效。
+   * 这里只清 d 轴 PI，保留 q 轴 PI，避免 q 轴牵引电压突变。 */
+  PIController_Reset(&s_current_loop.id_pi);
+  s_run_iq_only_until_ms = HAL_GetTick() + FOC_RUN_IQ_ONLY_HOLD_MS;
+  s_run_entry_prepared = 1u;
   {
     const float inv_two_pi = 0.15915494309f;
     BSP_KEY_SetSpeedTargetHz(speed_init_mech_rad_s * inv_two_pi);
@@ -196,6 +206,13 @@ static uint8_t app_foc_speed_loop_is_enabled(void)
 
 static void app_foc_speed_loop_step(void)
 {
+#if (FOC_SPEED_LOOP_ENABLE_IN_RUN == 0u)
+  s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
+  s_speed_loop.speed_fdb_mech_rad_s = s_speed_loop.speed_fdb_raw_mech_rad_s;
+  s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
+  s_speed_loop.enabled = 0u;
+  return;
+#else
   const float dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
   const float speed_alpha = app_foc_clampf(FOC_SPEED_FDB_FILTER_ALPHA, 0.0f, 1.0f);
   const uint32_t now_ms = HAL_GetTick();
@@ -234,9 +251,35 @@ static void app_foc_speed_loop_step(void)
     }
   }
 
-  s_speed_loop.iq_ref_cmd_a = app_foc_clampf(iq_cmd,
+  {
+    const float iq_target_a = app_foc_clampf(iq_cmd,
                                              FOC_SPEED_IQ_MIN_A,
                                              FOC_SPEED_IQ_MAX_A);
+    const float iq_step_a = FOC_SPEED_IQ_SLEW_A_PER_S * dt_sec;
+
+    if (iq_target_a > (s_speed_loop.iq_ref_cmd_a + iq_step_a))
+    {
+      s_speed_loop.iq_ref_cmd_a += iq_step_a;
+    }
+    else if (iq_target_a < (s_speed_loop.iq_ref_cmd_a - iq_step_a))
+    {
+      s_speed_loop.iq_ref_cmd_a -= iq_step_a;
+    }
+    else
+    {
+      s_speed_loop.iq_ref_cmd_a = iq_target_a;
+    }
+
+    s_speed_loop.iq_ref_cmd_a = app_foc_clampf(s_speed_loop.iq_ref_cmd_a,
+                                               FOC_SPEED_IQ_MIN_A,
+                                               FOC_SPEED_IQ_MAX_A);
+  }
+#endif
+}
+
+static uint8_t app_foc_run_iq_only_hold_active(void)
+{
+  return (s_run_iq_only_until_ms != 0u) && (HAL_GetTick() < s_run_iq_only_until_ms);
 }
 
 /*
@@ -260,7 +303,24 @@ static void app_foc_drive_enable(uint8_t enable)
  */
 static void app_foc_sampling_update(void)
 {
+  uint8_t fb_req = 0u;
+
+  /*
+   * s_pwm.svpwm_sector 表示当前 ADC 数据应使用的解码扇区。
+   * 采样模块只根据这个扇区选择可信两相和重构第三相。
+   */
   FOC_SamplingModule_SetSampleSector(&s_sampling, s_pwm.svpwm_sector);
+
+  /*
+   * hold-last fallback 只在 OPENLOOP/RUN 中启用。
+   * ALIGN 阶段电流环正在建立初始磁场，若冻结电流反馈，PI 容易持续推高电压。
+   */
+  if ((s_state == FOC_STATE_OPENLOOP) || (s_state == FOC_STATE_RUN))
+  {
+    fb_req = s_pwm.adc_trigger_fallback;
+  }
+
+  FOC_SamplingModule_SetFallbackRequest(&s_sampling, fb_req);
   FOC_SamplingModule_Update(&s_sampling);
 }
 
@@ -289,8 +349,13 @@ static void app_foc_apply_voltage_command(float *valpha, float *vbeta, uint8_t d
     return;
   }
 
+  /* 所有控制路径最终都汇到这里：
+   * valpha/vbeta -> 可选死区补偿 -> SVPWM -> TIM1 CCR。
+   * 这样可以保证不同状态下的 PWM 输出入口一致。
+   */
   valpha_cmd = *valpha;
   vbeta_cmd = *vbeta;
+  s_last_dt_enable = dt_enable;
 
 #if (FOC_DT_COMP_ENABLE != 0u)
   if (dt_enable != 0u)
@@ -334,6 +399,7 @@ static void app_foc_clear_current_loop_debug(void)
   s_current_loop.valpha_cmd_v = 0.0f;
   s_current_loop.vbeta_cmd_v = 0.0f;
   s_current_loop.theta_ctrl_rad = 0.0f;
+  s_last_dt_enable = 0u;
 }
 
 /*
@@ -383,6 +449,15 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->observer.angle_err_deg = s_observer.angle_err_deg;
   snapshot->observer.vbus_v = s_sampling.vbus_v;
   snapshot->observer.locked = s_observer.locked;
+  snapshot->observer.pll_err = s_observer.flux_obs.pll_err;
+  snapshot->observer.pll_integral = s_observer.flux_obs.pll_integral;
+  snapshot->observer.pll_speed_raw_rad_s = s_observer.flux_obs.pll_speed_raw_rad_s;
+  snapshot->observer.pll_speed_filt_rad_s = s_observer.flux_obs.pll_speed_filt_rad_s;
+  snapshot->observer.flux_alpha = s_observer.flux_obs.Flux_alpha_O;
+  snapshot->observer.flux_beta = s_observer.flux_obs.Flux_beta_O;
+  snapshot->observer.flux_mag = s_observer.flux_obs.flux_mag;
+  snapshot->observer.speed_limit_hit = s_observer.flux_obs.speed_limit_hit;
+  snapshot->observer.integral_limit_hit = s_observer.flux_obs.integral_limit_hit;
   FOC_ObserverGetInputs(&s_observer,
                         &snapshot->observer.valpha_v,
                         &snapshot->observer.vbeta_v,
@@ -412,11 +487,16 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->current_loop.iq_ref_a = s_current_loop.iq_ref_a;
   snapshot->current_loop.id_meas_a = s_current_loop.id_meas_a;
   snapshot->current_loop.iq_meas_a = s_current_loop.iq_meas_a;
+  snapshot->current_loop.vd_pi_v = s_current_loop.vd_pi_v;
   snapshot->current_loop.vd_cmd_v = s_current_loop.vd_cmd_v;
   snapshot->current_loop.vq_cmd_v = s_current_loop.vq_cmd_v;
   snapshot->current_loop.valpha_cmd_v = s_current_loop.valpha_cmd_v;
   snapshot->current_loop.vbeta_cmd_v = s_current_loop.vbeta_cmd_v;
   snapshot->current_loop.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
+  snapshot->current_loop.d_axis_enable_k = 0.0f;
+  snapshot->current_loop.run_iq_only = ((s_state == FOC_STATE_RUN) &&
+      ((FOC_RUN_FORCE_IQ_ONLY != 0u) || (app_foc_run_iq_only_hold_active() != 0u))) ? 1u : 0u;
+  snapshot->current_loop.dt_enable = s_last_dt_enable;
 
   /* 速度环信息。 */
   snapshot->speed_loop.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
@@ -439,6 +519,10 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->switchover.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
   snapshot->switchover.obs_speed_rad_s = s_observer.speed_rad_s;
   snapshot->switchover.speed_err_rad_s = s_switchover.speed_err_rad_s;
+  snapshot->switchover.fail_reason = s_switchover.fail_reason;
+  snapshot->switchover.last_blend_reset_reason = s_switchover.last_blend_reset_reason;
+  snapshot->switchover.blend_reset_count = s_switchover.blend_reset_count;
+  snapshot->switchover.last_blend_reset_angle_err_deg = s_switchover.last_blend_reset_angle_err_deg;
 }
 
 /*
@@ -457,8 +541,6 @@ static void app_foc_run_align(void)
   ClarkePark_DQ_t vdq = {0.0f, 0.0f};
   float valpha = 0.0f;
   float vbeta = 0.0f;
-
-  app_foc_force_mid_output();
 
   if (s_openloop.align_ticks == 0u)
   {
@@ -535,21 +617,13 @@ static void app_foc_run_openloop(void)
   theta_ctrl = FOC_SwitchoverSelectTheta(&s_switchover, &s_openloop, &s_observer);
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
-  ClarkePark_DQ_t vdq;
-  ClarkePark_AlphaBeta_t vab;
-  /* 热修复：
-   * 恢复原来的开环后期 q 轴主导输出。
-   * 上一版把 OPENLOOP 直接切成完整 dq 电流环后，
-   * observer 跟踪窗口被扰动，switchover 条件长期过不了。 */
-  FOC_CurrentLoopRunOpenLoopCurrent(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
-  vdq.d = 0.0f;
-  vdq.q = s_current_loop.vq_cmd_v;
-  ClarkePark_InvPark(&vdq, theta_ctrl, &vab);
+  /* OPENLOOP 明确切成 Iq-only：
+   * - 只跑 q 轴 PI；
+   * - 每拍冻结 d 轴 PI；
+   * - 强制 vd 为 0，避免后台积分在切换后突然显形。 */
+  FOC_CurrentLoopRunIqOnly(&s_current_loop, &s_sampling, theta_ctrl, s_cmd.iq_ref_a, &valpha, &vbeta);
   s_current_loop.vd_cmd_v = 0.0f;
-  s_current_loop.valpha_cmd_v = vab.alpha;
-  s_current_loop.vbeta_cmd_v = vab.beta;
-  valpha = s_current_loop.valpha_cmd_v;
-  vbeta = s_current_loop.vbeta_cmd_v;
+  s_current_loop.theta_ctrl_rad = theta_ctrl;
 #elif (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
   FOC_CurrentLoopRunOpenLoopVoltTest(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
 #else
@@ -666,6 +740,8 @@ static void app_foc_medium_handle_state_machine(void)
         FOC_OpenLoopResetRun(&s_openloop);
         FOC_SwitchoverReset(&s_switchover);
         FOC_CurrentLoopReset(&s_current_loop);
+        s_run_iq_only_until_ms = 0u;
+        s_run_entry_prepared = 0u;
         s_state = FOC_STATE_OPENLOOP;
       }
       break;
@@ -682,10 +758,14 @@ static void app_foc_medium_handle_state_machine(void)
         FOC_SwitchoverReset(&s_switchover);
         FOC_CurrentLoopReset(&s_current_loop);
         FOC_OpenLoopResetRun(&s_openloop);
+        s_run_iq_only_until_ms = 0u;
+        s_run_entry_prepared = 0u;
       }
 
       if (s_switchover.state == FOC_SW_STATE_OBSERVER)
       {
+        /* 先准备 RUN 入口，再切换状态，避免 RUN 首拍 Iq-only hold 未生效。 */
+        app_foc_prepare_run_entry();
         s_state = FOC_STATE_RUN;
       }
       break;
@@ -698,9 +778,9 @@ static void app_foc_medium_handle_state_machine(void)
       s_cmd.theta_mode = APP_FOC_THETA_MODE_OBSERVER;
       s_cmd.id_ref_a = 0.0f;
 
-      if (state_changed != 0u)
+      if ((state_changed != 0u) && (s_run_entry_prepared == 0u))
       {
-        /* 兜底保留 RUN 入口初始化，便于未来从其他状态切入 RUN。 */
+        /* 兜底保留 RUN 入口初始化；OPENLOOP->RUN 正常路径会提前执行。 */
         app_foc_prepare_run_entry();
       }
 
@@ -714,6 +794,8 @@ static void app_foc_medium_handle_state_machine(void)
       {
         FOC_OpenLoopResetRun(&s_openloop);
         FOC_SwitchoverReset(&s_switchover);
+        s_run_iq_only_until_ms = 0u;
+        s_run_entry_prepared = 0u;
         s_state = FOC_STATE_OPENLOOP;
       }
       break;
@@ -759,16 +841,34 @@ static void app_foc_run_run(void)
   }
 
   /* RUN 阶段不再推进开环角，直接使用 observer 角闭环运行。
-   * 开环变量只保留作调试参考，不再作为主控制量。 */
+   * 但刚进入 RUN 时，先继续保持 Iq-only 一段时间，避免 d 轴 PI 瞬间接管。 */
   theta_ctrl = FOC_ObserverGetThetaRad(&s_observer);
 
-  FOC_CurrentLoopRunWithRef(&s_current_loop,
-                            &s_sampling,
-                            theta_ctrl,
-                            s_cmd.id_ref_a,
-                            s_cmd.iq_ref_a,
-                            &valpha,
-                            &vbeta);
+#if (FOC_RUN_FORCE_IQ_ONLY != 0u)
+  FOC_CurrentLoopRunIqOnly(&s_current_loop,
+                           &s_sampling,
+                           theta_ctrl,
+                           s_cmd.iq_ref_a,
+                           &valpha,
+                           &vbeta);
+  s_current_loop.vd_cmd_v = 0.0f;
+#else
+  if (app_foc_run_iq_only_hold_active() != 0u)
+  {
+    FOC_CurrentLoopRunIqOnly(&s_current_loop, &s_sampling, theta_ctrl, s_cmd.iq_ref_a, &valpha, &vbeta);
+    s_current_loop.vd_cmd_v = 0.0f;
+  }
+  else
+  {
+    FOC_CurrentLoopRunWithRef(&s_current_loop,
+                              &s_sampling,
+                              theta_ctrl,
+                              s_cmd.id_ref_a,
+                              s_cmd.iq_ref_a,
+                              &valpha,
+                              &vbeta);
+  }
+#endif
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 
@@ -804,6 +904,8 @@ void AppFoc_Init(void)
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
   s_last_medium_tick_ms = 0u;
+  s_run_iq_only_until_ms = 0u;
+  s_run_entry_prepared = 0u;
 
   app_foc_force_mid_output();
   app_foc_drive_enable(0u);
@@ -840,6 +942,12 @@ void AppFoc_Start(void)
   s_sampling.offset_sum_u = 0.0f;
   s_sampling.offset_sum_v = 0.0f;
   s_sampling.offset_sum_w = 0.0f;
+  s_sampling.last_valid_iu_a = 0.0f;
+  s_sampling.last_valid_iv_a = 0.0f;
+  s_sampling.last_valid_iw_a = 0.0f;
+  s_sampling.last_valid_current_ready = 0u;
+  s_sampling.fallback_request = 0u;
+  s_sampling.used_hold_last_current = 0u;
 
   /* 启动后先保持中点输出并关闭驱动，等待零点校准。 */
   app_foc_medium_reset_command_defaults();
@@ -850,6 +958,8 @@ void AppFoc_Start(void)
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
   app_foc_speed_loop_reset(0.0f);
+  s_run_iq_only_until_ms = 0u;
+  s_run_entry_prepared = 0u;
   s_last_medium_tick_ms = HAL_GetTick();
   app_foc_force_mid_output();
   app_foc_drive_enable(0u);

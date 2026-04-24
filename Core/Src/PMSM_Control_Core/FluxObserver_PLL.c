@@ -15,15 +15,21 @@
 
 struct FluxObserver_PLL_t fluxObserver_pll_est = {0};
 
-static float s_flux_s_alpha = 0.0f;
-static float s_flux_s_beta = 0.0f;
-static float s_theta_rad = 0.0f;
-static float s_speed_rad_s = 0.0f;
-static float s_speed_filt_rad_s = 0.0f;
-static float s_pll_integral = 0.0f;
+/* 内部状态。
+ *
+ * 这些状态不放到输出结构体里，是因为上层只需要输入/输出量；
+ * 积分器和 PLL 状态属于算法内部记忆。
+ */
+static float s_flux_s_alpha = 0.0f;      /* 定子磁链 alpha 积分状态。 */
+static float s_flux_s_beta = 0.0f;       /* 定子磁链 beta 积分状态。 */
+static float s_theta_rad = 0.0f;         /* PLL 当前估算角度。 */
+static float s_speed_rad_s = 0.0f;       /* PLL 未滤波速度。 */
+static float s_speed_filt_rad_s = 0.0f;  /* PLL 滤波后速度，对外输出。 */
+static float s_pll_integral = 0.0f;      /* PLL 积分项，决定稳态速度估计。 */
 
 static float clampf_local(float value, float min_value, float max_value)
 {
+    /* 本文件内部使用的轻量限幅，避免依赖外层工具函数。 */
     if (value > max_value)
     {
         return max_value;
@@ -61,6 +67,13 @@ void FluxObserver_PLL_reset(struct FluxObserver_PLL_t *obs)
     obs->Flux_beta_O = 0.0f;
     obs->Espeed_O = 0.0f;
     obs->Etheta_O = 0.0f;
+    obs->pll_err = 0.0f;
+    obs->pll_integral = 0.0f;
+    obs->pll_speed_raw_rad_s = 0.0f;
+    obs->pll_speed_filt_rad_s = 0.0f;
+    obs->flux_mag = 0.0f;
+    obs->speed_limit_hit = 0u;
+    obs->integral_limit_hit = 0u;
 
     s_flux_s_alpha = FOC_FLUX_WB;
     s_flux_s_beta = 0.0f;
@@ -91,9 +104,13 @@ static void FluxObserver_update(struct FluxObserver_PLL_t *obs)
     const float ialpha = obs->Ialpha_I;
     const float ibeta = obs->Ibeta_I;
 
+    /* 定子磁链积分：
+     * psi_s = integral(u_s - R_s * i_s) dt
+     */
     s_flux_s_alpha += Ts * (ualpha - Rs * ialpha);
     s_flux_s_beta += Ts * (ubeta - Rs * ibeta);
 
+    /* 从定子磁链中扣除电感磁链，得到近似转子磁链。 */
     float flux_r_alpha = s_flux_s_alpha - Ls * ialpha;
     float flux_r_beta = s_flux_s_beta - Ls * ibeta;
 
@@ -116,6 +133,7 @@ static void FluxObserver_update(struct FluxObserver_PLL_t *obs)
     /* 把当前估算出的磁链向量回写到输出结构里，供上层打印和分析。 */
     obs->Flux_alpha_O = flux_r_alpha;
     obs->Flux_beta_O = flux_r_beta;
+    obs->flux_mag = sqrtf((flux_r_alpha * flux_r_alpha) + (flux_r_beta * flux_r_beta));
 }
 
 /* PLL 更新。
@@ -168,6 +186,12 @@ static void PLL_update(struct FluxObserver_PLL_t *obs)
     /* 把 PLL 的速度和角度写回输出。
      * 这里的角度已经被包回 [0, 2pi)，方便上层直接画图。
      */
+    obs->pll_err = err;
+    obs->pll_integral = s_pll_integral;
+    obs->pll_speed_raw_rad_s = s_speed_rad_s;
+    obs->pll_speed_filt_rad_s = s_speed_filt_rad_s;
+    obs->speed_limit_hit = (fabsf(s_speed_rad_s) >= (FOC_OBS_SPEED_LIMIT_RAD_S * 0.98f)) ? 1u : 0u;
+    obs->integral_limit_hit = (fabsf(s_pll_integral) >= (FOC_OBS_PLL_INTEGRAL_LIMIT * 0.98f)) ? 1u : 0u;
     obs->Espeed_O = s_speed_filt_rad_s;
     obs->Etheta_O = s_theta_rad;
 }

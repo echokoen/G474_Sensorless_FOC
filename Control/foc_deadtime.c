@@ -10,6 +10,9 @@ static float foc_deadtime_clampf(float x, float lo, float hi)
 
 static float foc_deadtime_smooth_sign(float i_a, float ith_a)
 {
+  /* 电流方向决定死区误差方向。
+   * 但电流接近 0 时符号会被噪声反复翻转，所以在 +/-ith_a 内做线性过渡。
+   */
   if (ith_a <= 1.0e-6f)
   {
     if (i_a > 0.0f) { return 1.0f; }
@@ -64,6 +67,9 @@ void FOC_DeadtimeComp_Apply(FOC_DeadtimeComp_t *dt,
   *vbeta_out = vbeta_in;
   FOC_DeadtimeComp_Reset(dt);
 
+  /* 母线太低时不补偿。
+   * 此时补偿电压占比过大，反而可能把调试现象搞乱。
+   */
   if (vbus_v < FOC_DT_COMP_MIN_VBUS_V)
   {
     dt->valpha_out = *valpha_out;
@@ -79,18 +85,22 @@ void FOC_DeadtimeComp_Apply(FOC_DeadtimeComp_t *dt,
     return;
   }
 
+  /* 先把 alpha/beta 电压还原成三相相电压，方便逐相补偿。 */
   va = valpha_in;
   vb = (-0.5f * valpha_in) + (sqrt3_half * vbeta_in);
   vc = (-0.5f * valpha_in) - (sqrt3_half * vbeta_in);
 
+  /* 根据三相电流方向得到平滑符号。 */
   su = foc_deadtime_smooth_sign(iu_a, FOC_DT_COMP_CURR_TH_A);
   sv = foc_deadtime_smooth_sign(iv_a, FOC_DT_COMP_CURR_TH_A);
   sw = foc_deadtime_smooth_sign(iw_a, FOC_DT_COMP_CURR_TH_A);
 
+  /* 死区补偿幅值近似为 k * Vbus，方向由电流符号决定。 */
   vdt_u = FOC_DT_COMP_SIGN * k_used * vbus_v * su;
   vdt_v = FOC_DT_COMP_SIGN * k_used * vbus_v * sv;
   vdt_w = FOC_DT_COMP_SIGN * k_used * vbus_v * sw;
 
+  /* 去掉三相补偿的公共模式分量，只保留会影响线电压的部分。 */
   vcm = (vdt_u + vdt_v + vdt_w) * 0.33333333333f;
   vdt_u -= vcm;
   vdt_v -= vcm;
@@ -100,6 +110,7 @@ void FOC_DeadtimeComp_Apply(FOC_DeadtimeComp_t *dt,
   vb += vdt_v;
   vc += vdt_w;
 
+  /* 再把补偿后的三相电压转换回 alpha/beta，送给 SVPWM。 */
   *valpha_out = va;
   *vbeta_out = (vb - vc) * inv_sqrt3;
 

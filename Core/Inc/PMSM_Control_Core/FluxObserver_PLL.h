@@ -25,15 +25,23 @@ extern "C" {
  * - `Etheta_O`：PLL 给出的电角度估计值。
  */
 struct FluxObserver_PLL_t {
-    float Valpha_I;
-    float Vbeta_I;
-    float Ialpha_I;
-    float Ibeta_I;
+    float Valpha_I;       /* 输入：alpha 轴电压，单位 V。 */
+    float Vbeta_I;        /* 输入：beta 轴电压，单位 V。 */
+    float Ialpha_I;       /* 输入：alpha 轴电流，单位 A。 */
+    float Ibeta_I;        /* 输入：beta 轴电流，单位 A。 */
 
-    float Flux_alpha_O;
-    float Flux_beta_O;
-    float Espeed_O;
-    float Etheta_O;
+    float Flux_alpha_O;   /* 输出：alpha 轴转子磁链估计，单位 Wb。 */
+    float Flux_beta_O;    /* 输出：beta 轴转子磁链估计，单位 Wb。 */
+    float Espeed_O;       /* 输出：PLL 滤波后的电角速度，单位 rad/s。 */
+    float Etheta_O;       /* 输出：PLL 估算电角度，范围 [0, 2pi)。 */
+
+    float pll_err;              /* 调试：PLL 归一化相位误差。 */
+    float pll_integral;         /* 调试：PLL 积分项，单位 rad/s。 */
+    float pll_speed_raw_rad_s;  /* 调试：PLL 未滤波电角速度，单位 rad/s。 */
+    float pll_speed_filt_rad_s; /* 调试：PLL 滤波后电角速度，单位 rad/s。 */
+    float flux_mag;             /* 调试：转子磁链幅值，单位 Wb。 */
+    uint8_t speed_limit_hit;    /* 调试：速度限幅是否接近打满。 */
+    uint8_t integral_limit_hit; /* 调试：积分限幅是否接近打满。 */
 };
 
 extern struct FluxObserver_PLL_t fluxObserver_pll_est;

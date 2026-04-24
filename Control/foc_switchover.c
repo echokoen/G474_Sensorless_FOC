@@ -6,6 +6,12 @@
 /* 观测器接管与过渡实现。
  *
  * 负责判断接管条件、执行混合过渡并输出最终控制角。
+ *
+ * 这层的核心目标不是“尽快接管”，而是“确认 observer 真的可信再接管”：
+ * - 机械频率要达到门限；
+ * - observer 角和开环角要接近；
+ * - observer 速度和开环速度要接近；
+ * - 条件还要连续保持一段时间。
  */
 static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
                                         const FOC_OpenLoopData_t *openloop,
@@ -22,6 +28,7 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
     sw->obs_speed_rad_s = obs_speed;
     sw->speed_err_rad_s = speed_err;
     sw->ready_now = 0u;
+    sw->fail_reason = 0u;
   }
 
   /* 低速时开环电角速度本身较小，
@@ -34,11 +41,13 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
 
   if (FOC_OpenLoopGetFreqHz(openloop) < FOC_SWITCHOVER_MIN_MECH_FREQ_HZ)
   {
+    if (sw != 0) { sw->fail_reason |= 0x01u; }
     return 0u;
   }
 
   if (fabsf(FOC_ObserverGetAngleErrDeg(observer)) > FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG)
   {
+    if (sw != 0) { sw->fail_reason |= 0x02u; }
     return 0u;
   }
 
@@ -48,6 +57,7 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
    * 这样可以避免“角度偶然对上，但速度其实没跟住”导致的误接管。 */
   if (speed_err > speed_limit)
   {
+    if (sw != 0) { sw->fail_reason |= 0x04u; }
     return 0u;
   }
 
@@ -79,6 +89,11 @@ void FOC_SwitchoverReset(FOC_SwitchoverData_t *sw)
   sw->open_speed_rad_s = 0.0f;
   sw->obs_speed_rad_s = 0.0f;
   sw->speed_err_rad_s = 0.0f;
+  sw->fail_reason = 0u;
+  sw->last_blend_reset_reason = 0u;
+  sw->blend_fail_ticks = 0u;
+  sw->blend_reset_count = 0u;
+  sw->last_blend_reset_angle_err_deg = 0.0f;
   sw->state = FOC_SW_STATE_OPENLOOP;
 }
 
@@ -100,6 +115,9 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
 
   if (sw->state == FOC_SW_STATE_OPENLOOP)
   {
+    /* OPENLOOP 状态只累计 ready 保持时间。
+     * 条件一旦断掉，保持计数清零，避免偶然一拍满足就接管。
+     */
     if (ready_now != 0u)
     {
       if (sw->hold_ticks < hold_ticks)
@@ -112,6 +130,7 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
         sw->observer_ready = 1u;
         sw->state = FOC_SW_STATE_BLEND;
         sw->blend_ticks = 0u;
+        sw->blend_fail_ticks = 0u;
         sw->blend_k = 0.0f;
       }
     }
@@ -127,9 +146,50 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
 
   else if (sw->state == FOC_SW_STATE_BLEND)
   {
+    uint8_t blend_reset_now = 0u;
+
+    /* BLEND 状态做角度平滑过渡。
+     * 进入 BLEND 前仍使用严格门限；进入 BLEND 后，对角度单拍毛刺做防抖。
+     * 只有连续失败达到阈值，才退回 OPENLOOP。
+     */
     if (ready_now == 0u)
     {
+      const uint8_t reason = sw->fail_reason;
+      const float angle_err_abs = fabsf(FOC_ObserverGetAngleErrDeg(observer));
+
+      if (((reason & (uint8_t)~0x02u) == 0u) &&
+          (angle_err_abs <= FOC_SWITCHOVER_BLEND_MAX_ANGLE_ERR_DEG))
+      {
+        /* BLEND 中只发生角度轻微毛刺，继续过渡，不立刻打回。 */
+        sw->blend_fail_ticks = 0u;
+      }
+      else
+      {
+        if (sw->blend_fail_ticks < FOC_SWITCHOVER_BLEND_FAIL_HOLD_TICKS)
+        {
+          sw->blend_fail_ticks++;
+        }
+
+        if (sw->blend_fail_ticks >= FOC_SWITCHOVER_BLEND_FAIL_HOLD_TICKS)
+        {
+          blend_reset_now = 1u;
+        }
+      }
+    }
+    else
+    {
+      sw->blend_fail_ticks = 0u;
+    }
+
+    if (blend_reset_now != 0u)
+    {
+      const uint8_t reset_reason = sw->fail_reason;
+      const uint32_t reset_count = sw->blend_reset_count + 1u;
+      const float reset_angle_err_deg = FOC_ObserverGetAngleErrDeg(observer);
       FOC_SwitchoverReset(sw);
+      sw->last_blend_reset_reason = reset_reason;
+      sw->blend_reset_count = reset_count;
+      sw->last_blend_reset_angle_err_deg = reset_angle_err_deg;
     }
 
     else if (blend_ticks == 0u)
@@ -184,6 +244,9 @@ float FOC_SwitchoverSelectTheta(const FOC_SwitchoverData_t *sw,
 
   if (sw->state == FOC_SW_STATE_BLEND)
   {
+    /* 角度混合必须沿最短角差方向走。
+     * 所以先 WrapPi 得到 [-pi, pi] 范围内的 delta，再叠加到开环角上。
+     */
     const float delta = FOC_MathWrapPi(FOC_ObserverGetThetaRad(observer) - FOC_OpenLoopGetThetaErad(openloop));
     theta_ctrl = FOC_MathWrap2Pi(FOC_OpenLoopGetThetaErad(openloop) + (sw->blend_k * delta));
   }

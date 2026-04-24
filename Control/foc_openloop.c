@@ -5,6 +5,8 @@
 /* 开环轨迹实现。
  *
  * 负责对齐阶段和开环运行阶段的角度、频率推进。
+ * 它的输出只是一条“角度时间轨迹”，实际电压/电流怎么给，
+ * 由 app_foc 根据当前控制模式决定。
  */
 void FOC_OpenLoopInit(FOC_OpenLoopData_t *openloop)
 {
@@ -39,6 +41,9 @@ void FOC_OpenLoopResetRun(FOC_OpenLoopData_t *openloop)
 
 void FOC_OpenLoopAdvance(FOC_OpenLoopData_t *openloop)
 {
+  /* 开环频率按线性斜坡从起始频率爬到目标频率。
+   * 斜坡越慢，observer 越容易跟上；斜坡越快，启动更快但更容易丢步。
+   */
   const float inv_ramp_time_s = 1.0f / (FOC_OPENLOOP_RAMP_TIME_MS * 0.001f);
   const float ramp_rate_hz_per_s = (FOC_OPENLOOP_TARGET_FREQ_HZ - FOC_OPENLOOP_START_FREQ_HZ) * inv_ramp_time_s;
   const float ramp_step_hz = ramp_rate_hz_per_s * FOC_TS_SEC;
@@ -58,6 +63,7 @@ void FOC_OpenLoopAdvance(FOC_OpenLoopData_t *openloop)
     }
   }
 
+  /* 机械频率乘极对数得到电频率，再乘 2pi 和控制周期得到本拍角度增量。 */
   openloop->theta_e_rad += two_pi * (openloop->mech_freq_hz * FOC_POLE_PAIRS) * FOC_TS_SEC;
   openloop->theta_e_rad = FOC_MathWrap2Pi(openloop->theta_e_rad);
 }

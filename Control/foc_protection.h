@@ -29,6 +29,12 @@ typedef enum
 } FOC_FaultFlags_t;
 
 uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling);
+
+/* 执行统一保护停机：
+ * - PWM 回中点；
+ * - 关闭驱动使能；
+ * - 状态切到 FAULT。
+ */
 void FOC_ProtectionApplyStop(FOC_StateTypeDef *state, FOC_PwmData_t *pwm);
 #ifdef __cplusplus
 }

@@ -13,9 +13,9 @@ extern "C" {
 
 typedef enum
 {
-  FOC_SW_STATE_OPENLOOP = 0,
-  FOC_SW_STATE_BLEND,
-  FOC_SW_STATE_OBSERVER
+  FOC_SW_STATE_OPENLOOP = 0, /* 仍使用开环角作为控制角。 */
+  FOC_SW_STATE_BLEND,        /* 开环角和 observer 角按 blend_k 平滑混合。 */
+  FOC_SW_STATE_OBSERVER      /* observer 角完全接管控制角。 */
 } FOC_SwitchoverState_t;
 
 typedef struct
@@ -28,19 +28,29 @@ typedef struct
   float open_speed_rad_s;   /* 当前开环电角速度，供调试查看。 */
   float obs_speed_rad_s;    /* 当前 observer 电角速度，供调试查看。 */
   float speed_err_rad_s;    /* 当前速度误差绝对值，供调试查看。 */
-  FOC_SwitchoverState_t state;
+  uint8_t fail_reason;      /* 本拍 ready 失败原因位图：bit0=频率，bit1=角度，bit2=速度。 */
+  uint8_t last_blend_reset_reason; /* 最近一次 BLEND 被打回 OPENLOOP 的原因位图。 */
+  uint32_t blend_fail_ticks;       /* BLEND 中连续失败计数，用于抑制单拍毛刺。 */
+  uint32_t blend_reset_count;      /* BLEND 被打回 OPENLOOP 的累计次数。 */
+  float last_blend_reset_angle_err_deg; /* 最近一次 BLEND 回退瞬间的角度误差。 */
+  FOC_SwitchoverState_t state; /* 当前接管状态机状态。 */
 } FOC_SwitchoverData_t;
+
+/* 初始化/复位接管状态。 */
 void FOC_SwitchoverInit(FOC_SwitchoverData_t *sw);
 void FOC_SwitchoverReset(FOC_SwitchoverData_t *sw);
 
+/* 更新接管状态机：判断是否 ready、是否进入 BLEND、是否完成接管。 */
 void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
                           const FOC_OpenLoopData_t *openloop,
                           const FOC_ObserverData_t *observer);
 
+/* 根据当前接管状态选择最终控制角。 */
 float FOC_SwitchoverSelectTheta(const FOC_SwitchoverData_t *sw,
                                 const FOC_OpenLoopData_t *openloop,
                                 const FOC_ObserverData_t *observer);
 
+/* 打包接管调试量，供 app_foc 生成运行快照。 */
 void FOC_SwitchoverGetDebug(const FOC_SwitchoverData_t *sw,
                             const FOC_OpenLoopData_t *openloop,
                             const FOC_ObserverData_t *observer,

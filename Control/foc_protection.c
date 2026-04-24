@@ -16,6 +16,10 @@ uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
     return FOC_FAULT_NONE;
   }
 
+  /* 母线电压保护。
+   * 欠压时 PWM 电压利用率和观测器输入都会失真；
+   * 过压时先保护功率级。
+   */
   if (sampling->vbus_v < FOC_VBUS_UNDERVOLTAGE_V)
   {
     fault_flags |= FOC_FAULT_VBUS_UNDER;
@@ -26,6 +30,9 @@ uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
     fault_flags |= FOC_FAULT_VBUS_OVER;
   }
 
+  /* 三相独立过流保护。
+   * 这里用重构后的相电流做软件保护，硬件比较器/驱动保护应作为更底层兜底。
+   */
   if (fabsf(sampling->iu_a) > FOC_CURRENT_LIMIT_A)
   {
     fault_flags |= FOC_FAULT_OC_U;
@@ -46,6 +53,11 @@ uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
 
 void FOC_ProtectionApplyStop(FOC_StateTypeDef *state, FOC_PwmData_t *pwm)
 {
+  /* 故障停机顺序：
+   * 1. 先把 PWM 比较值拉回安全中点；
+   * 2. 再关闭驱动使能；
+   * 3. 最后锁定状态机到 FAULT。
+   */
   FOC_PwmModule_SetTim1Mid(pwm);
   HAL_GPIO_WritePin(M1_EN_DRIVER_GPIO_Port, M1_EN_DRIVER_Pin, GPIO_PIN_RESET);
 

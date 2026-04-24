@@ -19,6 +19,11 @@ extern "C" {
  * 1. 这里只放“公共类型”，不放具体算法实现；
  * 2. 调试快照和运行快照统一定义在这里；
  * 3. 尽量避免到处声明零散 getter，改为结构化快照读取。
+ *
+ * 维护提醒：
+ * 如果新增调试字段，优先考虑是否属于“高频底层调试”
+ * 还是“应用层运行总览”，分别放到 FOC_DebugSnapshot_t
+ * 或 FOC_RuntimeSnapshot_t 中，避免一个结构体无限膨胀。
  */
 
 /*
@@ -59,6 +64,8 @@ typedef struct
   uint8_t pwm_sec;/* 当前 PWM 输出扇区。 */
   uint8_t pair;   /* 当前可信两相组合：1=VW，2=UW，3=UV。 */
   uint8_t fb;     /* 采样点是否走回退策略。 */
+  uint8_t hold;   /* 1=本拍采样窗口不足，电流反馈沿用上一拍有效值。 */
+  uint8_t dyn;    /* 1=ADC触发点由动态窗口算法偏移。 */
   uint16_t ccru;  /* U 相 PWM 比较值。 */
   uint16_t ccrv;  /* V 相 PWM 比较值。 */
   uint16_t ccrw;  /* W 相 PWM 比较值。 */
@@ -95,8 +102,17 @@ typedef struct
   float vbeta_v;         /* 输入到观测器的 beta 轴电压。 */
   float ialpha_a;        /* 输入到观测器的 alpha 轴电流。 */
   float ibeta_a;         /* 输入到观测器的 beta 轴电流。 */
+  float pll_err;         /* PLL 归一化相位误差。 */
+  float pll_integral;    /* PLL 积分项，单位 rad/s。 */
+  float pll_speed_raw_rad_s;  /* PLL 未滤波电角速度，单位 rad/s。 */
+  float pll_speed_filt_rad_s; /* PLL 滤波后电角速度，单位 rad/s。 */
+  float flux_alpha;      /* 转子磁链 alpha 分量。 */
+  float flux_beta;       /* 转子磁链 beta 分量。 */
+  float flux_mag;        /* 转子磁链幅值。 */
   float vbus_v;          /* 当前母线电压。 */
   uint8_t locked;        /* 观测器是否锁定。 */
+  uint8_t speed_limit_hit;    /* PLL 速度限幅是否接近打满。 */
+  uint8_t integral_limit_hit; /* PLL 积分限幅是否接近打满。 */
 } FOC_ObserverSnapshot_t;
 
 /* 采样模块快照。 */
@@ -127,11 +143,15 @@ typedef struct
   float iq_ref_a;         /* q 轴电流参考值。 */
   float id_meas_a;        /* d 轴电流反馈值。 */
   float iq_meas_a;        /* q 轴电流反馈值。 */
+  float vd_pi_v;          /* d 轴 PI 原始输出，软接管时用于观察突变风险。 */
   float vd_cmd_v;         /* d 轴电压指令。 */
   float vq_cmd_v;         /* q 轴电压指令。 */
   float valpha_cmd_v;     /* alpha 轴电压指令。 */
   float vbeta_cmd_v;      /* beta 轴电压指令。 */
   float theta_ctrl_rad;   /* 本拍控制角。 */
+  float d_axis_enable_k;   /* d 轴 PI 软接管系数，0=Iq-only，1=完整 d 轴接管。 */
+  uint8_t run_iq_only;     /* 1=RUN 阶段当前使用 Iq-only 控制。 */
+  uint8_t dt_enable;       /* 1=本拍电压输出启用了死区补偿。 */
 } FOC_CurrentLoopSnapshot_t;
 
 /* 速度环快照。 */
@@ -160,6 +180,10 @@ typedef struct
   float open_speed_rad_s;   /* 开环电角速度。 */
   float obs_speed_rad_s;    /* 观测器估算角速度。 */
   float speed_err_rad_s;    /* 开环/观测器速度误差绝对值。 */
+  uint8_t fail_reason;      /* 本拍接管条件失败原因位图：bit0=频率，bit1=角度，bit2=速度。 */
+  uint8_t last_blend_reset_reason; /* 最近一次 BLEND 回退原因位图。 */
+  uint32_t blend_reset_count;      /* BLEND 回退累计次数。 */
+  float last_blend_reset_angle_err_deg; /* 最近一次 BLEND 回退瞬间的角度误差。 */
 } FOC_SwitchoverSnapshot_t;
 
 /*
