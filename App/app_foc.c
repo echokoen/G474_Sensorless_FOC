@@ -89,6 +89,7 @@ typedef struct
 static AppFoc_Command_t s_cmd = {FOC_STATE_IDLE, APP_FOC_THETA_MODE_ALIGN, 0.0f, 0.0f, 0.0f, 0u};
 static AppFoc_Feedback_t s_feedback = {0};
 static uint32_t s_last_medium_tick_ms = 0u;
+static float s_medium_task_dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
 
 /* 最小速度环。
  *
@@ -112,9 +113,11 @@ typedef struct
 } AppFoc_SpeedLoop_t;
 
 static AppFoc_SpeedLoop_t s_speed_loop = {0};
-static uint32_t s_run_iq_only_until_ms = 0u;
+static uint32_t s_d_axis_soft_start_ms = 0u;
 static uint8_t s_run_entry_prepared = 0u;
 static uint8_t s_last_dt_enable = 0u;
+static float s_d_axis_enable_k = 0.0f;
+static float s_d_axis_vd_limit_v = FOC_D_AXIS_VD_LIMIT_START_V;
 
 static float app_foc_clampf(float x, float lo, float hi)
 {
@@ -187,11 +190,8 @@ static void app_foc_prepare_run_entry(void)
 
   app_foc_speed_loop_reset(speed_init_mech_rad_s);
 
-  /* RUN 入口必须在切换到 RUN 之前完成。
-   * 否则高频任务可能先进入 RUN，而 Iq-only hold 尚未生效。
-   * 这里只清 d 轴 PI，保留 q 轴 PI，避免 q 轴牵引电压突变。 */
-  PIController_Reset(&s_current_loop.id_pi);
-  s_run_iq_only_until_ms = HAL_GetTick() + FOC_RUN_IQ_ONLY_HOLD_MS;
+  /* RUN 入口不再清电流环 PI。
+   * Id/Iq 双环已经在 OPENLOOP 阶段逐步接管，RUN 只切换角度来源和速度环给定。 */
   s_run_entry_prepared = 1u;
   {
     const float inv_two_pi = 0.15915494309f;
@@ -204,7 +204,7 @@ static uint8_t app_foc_speed_loop_is_enabled(void)
   return s_speed_loop.enabled;
 }
 
-static void app_foc_speed_loop_step(void)
+static void app_foc_speed_loop_step(float dt_sec)
 {
 #if (FOC_SPEED_LOOP_ENABLE_IN_RUN == 0u)
   s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
@@ -213,10 +213,11 @@ static void app_foc_speed_loop_step(void)
   s_speed_loop.enabled = 0u;
   return;
 #else
-  const float dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
   const float speed_alpha = app_foc_clampf(FOC_SPEED_FDB_FILTER_ALPHA, 0.0f, 1.0f);
   const uint32_t now_ms = HAL_GetTick();
   float iq_cmd;
+
+  dt_sec = app_foc_clampf(dt_sec, 0.001f, 0.100f);
 
   s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
   s_speed_loop.speed_fdb_mech_rad_s += speed_alpha *
@@ -277,9 +278,28 @@ static void app_foc_speed_loop_step(void)
 #endif
 }
 
-static uint8_t app_foc_run_iq_only_hold_active(void)
+static void app_foc_d_axis_soft_reset(void)
 {
-  return (s_run_iq_only_until_ms != 0u) && (HAL_GetTick() < s_run_iq_only_until_ms);
+  s_d_axis_soft_start_ms = HAL_GetTick();
+  s_d_axis_enable_k = 0.0f;
+  s_d_axis_vd_limit_v = FOC_D_AXIS_VD_LIMIT_START_V;
+}
+
+static void app_foc_d_axis_soft_update(void)
+{
+  uint32_t elapsed_ms;
+  float k;
+
+  if (s_d_axis_soft_start_ms == 0u)
+  {
+    app_foc_d_axis_soft_reset();
+  }
+
+  elapsed_ms = HAL_GetTick() - s_d_axis_soft_start_ms;
+  k = (float)elapsed_ms / (float)FOC_D_AXIS_SOFT_RAMP_MS;
+  s_d_axis_enable_k = app_foc_clampf(k, 0.0f, 1.0f);
+  s_d_axis_vd_limit_v = FOC_D_AXIS_VD_LIMIT_START_V +
+      ((FOC_D_AXIS_VD_LIMIT_END_V - FOC_D_AXIS_VD_LIMIT_START_V) * s_d_axis_enable_k);
 }
 
 /*
@@ -493,9 +513,8 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->current_loop.valpha_cmd_v = s_current_loop.valpha_cmd_v;
   snapshot->current_loop.vbeta_cmd_v = s_current_loop.vbeta_cmd_v;
   snapshot->current_loop.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
-  snapshot->current_loop.d_axis_enable_k = 0.0f;
-  snapshot->current_loop.run_iq_only = ((s_state == FOC_STATE_RUN) &&
-      ((FOC_RUN_FORCE_IQ_ONLY != 0u) || (app_foc_run_iq_only_hold_active() != 0u))) ? 1u : 0u;
+  snapshot->current_loop.d_axis_enable_k = s_d_axis_enable_k;
+  snapshot->current_loop.run_iq_only = 0u;
   snapshot->current_loop.dt_enable = s_last_dt_enable;
 
   /* 速度环信息。 */
@@ -617,13 +636,18 @@ static void app_foc_run_openloop(void)
   theta_ctrl = FOC_SwitchoverSelectTheta(&s_switchover, &s_openloop, &s_observer);
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
-  /* OPENLOOP 明确切成 Iq-only：
-   * - 只跑 q 轴 PI；
-   * - 每拍冻结 d 轴 PI；
-   * - 强制 vd 为 0，避免后台积分在切换后突然显形。 */
-  FOC_CurrentLoopRunIqOnly(&s_current_loop, &s_sampling, theta_ctrl, s_cmd.iq_ref_a, &valpha, &vbeta);
-  s_current_loop.vd_cmd_v = 0.0f;
-  s_current_loop.theta_ctrl_rad = theta_ctrl;
+  /* OPENLOOP 开始即使用 Id/Iq 双电流环。
+   * d 轴通过 gain + vd_limit 软释放，避免后续 RUN 阶段突然接管。 */
+  app_foc_d_axis_soft_update();
+  FOC_CurrentLoopRunDSoft(&s_current_loop,
+                          &s_sampling,
+                          theta_ctrl,
+                          s_cmd.id_ref_a,
+                          s_cmd.iq_ref_a,
+                          s_d_axis_enable_k,
+                          s_d_axis_vd_limit_v,
+                          &valpha,
+                          &vbeta);
 #elif (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
   FOC_CurrentLoopRunOpenLoopVoltTest(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
 #else
@@ -740,7 +764,7 @@ static void app_foc_medium_handle_state_machine(void)
         FOC_OpenLoopResetRun(&s_openloop);
         FOC_SwitchoverReset(&s_switchover);
         FOC_CurrentLoopReset(&s_current_loop);
-        s_run_iq_only_until_ms = 0u;
+        app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
         s_state = FOC_STATE_OPENLOOP;
       }
@@ -758,7 +782,7 @@ static void app_foc_medium_handle_state_machine(void)
         FOC_SwitchoverReset(&s_switchover);
         FOC_CurrentLoopReset(&s_current_loop);
         FOC_OpenLoopResetRun(&s_openloop);
-        s_run_iq_only_until_ms = 0u;
+        app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
       }
 
@@ -784,7 +808,7 @@ static void app_foc_medium_handle_state_machine(void)
         app_foc_prepare_run_entry();
       }
 
-      app_foc_speed_loop_step();
+      app_foc_speed_loop_step(s_medium_task_dt_sec);
       s_cmd.speed_loop_enable = app_foc_speed_loop_is_enabled();
       s_cmd.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
       s_cmd.iq_ref_a = s_speed_loop.iq_ref_cmd_a;
@@ -794,7 +818,7 @@ static void app_foc_medium_handle_state_machine(void)
       {
         FOC_OpenLoopResetRun(&s_openloop);
         FOC_SwitchoverReset(&s_switchover);
-        s_run_iq_only_until_ms = 0u;
+        app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
         s_state = FOC_STATE_OPENLOOP;
       }
@@ -841,34 +865,19 @@ static void app_foc_run_run(void)
   }
 
   /* RUN 阶段不再推进开环角，直接使用 observer 角闭环运行。
-   * 但刚进入 RUN 时，先继续保持 Iq-only 一段时间，避免 d 轴 PI 瞬间接管。 */
+   * Id/Iq 双电流环已经在 OPENLOOP 阶段逐步接管，这里不再做 Iq-only hold。 */
   theta_ctrl = FOC_ObserverGetThetaRad(&s_observer);
 
-#if (FOC_RUN_FORCE_IQ_ONLY != 0u)
-  FOC_CurrentLoopRunIqOnly(&s_current_loop,
-                           &s_sampling,
-                           theta_ctrl,
-                           s_cmd.iq_ref_a,
-                           &valpha,
-                           &vbeta);
-  s_current_loop.vd_cmd_v = 0.0f;
-#else
-  if (app_foc_run_iq_only_hold_active() != 0u)
-  {
-    FOC_CurrentLoopRunIqOnly(&s_current_loop, &s_sampling, theta_ctrl, s_cmd.iq_ref_a, &valpha, &vbeta);
-    s_current_loop.vd_cmd_v = 0.0f;
-  }
-  else
-  {
-    FOC_CurrentLoopRunWithRef(&s_current_loop,
-                              &s_sampling,
-                              theta_ctrl,
-                              s_cmd.id_ref_a,
-                              s_cmd.iq_ref_a,
-                              &valpha,
-                              &vbeta);
-  }
-#endif
+  app_foc_d_axis_soft_update();
+  FOC_CurrentLoopRunDSoft(&s_current_loop,
+                          &s_sampling,
+                          theta_ctrl,
+                          s_cmd.id_ref_a,
+                          s_cmd.iq_ref_a,
+                          s_d_axis_enable_k,
+                          s_d_axis_vd_limit_v,
+                          &valpha,
+                          &vbeta);
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 
@@ -904,7 +913,7 @@ void AppFoc_Init(void)
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
   s_last_medium_tick_ms = 0u;
-  s_run_iq_only_until_ms = 0u;
+  app_foc_d_axis_soft_reset();
   s_run_entry_prepared = 0u;
 
   app_foc_force_mid_output();
@@ -958,7 +967,7 @@ void AppFoc_Start(void)
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
   app_foc_speed_loop_reset(0.0f);
-  s_run_iq_only_until_ms = 0u;
+  app_foc_d_axis_soft_reset();
   s_run_entry_prepared = 0u;
   s_last_medium_tick_ms = HAL_GetTick();
   app_foc_force_mid_output();
@@ -993,12 +1002,14 @@ void AppFoc_Stop(void)
 void AppFoc_MediumFreqTask(void)
 {
   const uint32_t now_ms = HAL_GetTick();
+  const uint32_t elapsed_ms = now_ms - s_last_medium_tick_ms;
 
-  if ((now_ms - s_last_medium_tick_ms) < APP_FOC_MEDIUM_TASK_PERIOD_MS)
+  if (elapsed_ms < APP_FOC_MEDIUM_TASK_PERIOD_MS)
   {
     return;
   }
 
+  s_medium_task_dt_sec = (float)elapsed_ms * 0.001f;
   s_last_medium_tick_ms = now_ms;
   app_foc_medium_handle_state_machine();
 }
@@ -1081,6 +1092,10 @@ void AppFoc_SetSpeedTargetMechHz(float mech_hz)
   if (target_rad_s < 0.0f)
   {
     target_rad_s = 0.0f;
+  }
+  else if (target_rad_s > FOC_SPEED_TARGET_MAX_MECH_RAD_S)
+  {
+    target_rad_s = FOC_SPEED_TARGET_MAX_MECH_RAD_S;
   }
 
   s_speed_loop.speed_ref_cmd_mech_rad_s = target_rad_s;

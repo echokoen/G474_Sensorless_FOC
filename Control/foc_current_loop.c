@@ -31,6 +31,19 @@ static void foc_current_loop_limit_vector(float *x, float *y, float limit)
   }
 }
 
+static void foc_current_loop_set_pi_limit(PIController_t *pi, float limit)
+{
+  if ((pi == 0) || (limit <= 0.0f))
+  {
+    return;
+  }
+
+  pi->integral_min = -limit;
+  pi->integral_max = limit;
+  pi->out_min = -limit;
+  pi->out_max = limit;
+}
+
 void FOC_CurrentLoopInit(FOC_CurrentLoopData_t *loop)
 {
   if (loop == 0)
@@ -132,6 +145,8 @@ void FOC_CurrentLoopRunWithRef(FOC_CurrentLoopData_t *loop,
   /* 2. d/q 两轴独立 PI。
    * FOC_VD_CMD_SIGN / FOC_VQ_CMD_SIGN 用于适配实际硬件极性。
    */
+  foc_current_loop_set_pi_limit(&loop->id_pi, FOC_CURR_LOOP_V_LIMIT);
+  foc_current_loop_set_pi_limit(&loop->iq_pi, FOC_CURR_LOOP_V_LIMIT);
   vdq.d = FOC_VD_CMD_SIGN * PIController_Run(&loop->id_pi, loop->id_ref_a, idq.d, FOC_TS_SEC);
   loop->vd_pi_v = vdq.d;
   vdq.q = FOC_VQ_CMD_SIGN * PIController_Run(&loop->iq_pi, loop->iq_ref_a, idq.q, FOC_TS_SEC);
@@ -215,6 +230,8 @@ void FOC_CurrentLoopRunDSoft(FOC_CurrentLoopData_t *loop,
   FOC_CurrentLoopMeasureDQ(loop, sampling, theta_rad, 0, &idq);
   loop->id_ref_a = id_ref_a;
   loop->iq_ref_a = iq_ref_a;
+  foc_current_loop_set_pi_limit(&loop->id_pi, vd_cmd_limit_v);
+  foc_current_loop_set_pi_limit(&loop->iq_pi, FOC_CURR_LOOP_V_LIMIT);
 
   if (k <= 0.0f)
   {

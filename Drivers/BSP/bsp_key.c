@@ -20,7 +20,7 @@
 #define BSP_KEY_SPEED_STEP_SHORT_HZ  (0.5f)
 #define BSP_KEY_SPEED_STEP_LONG_HZ   (0.2f)
 #define BSP_KEY_SPEED_MIN_HZ         (16.667f)   /* 1000 rpm */
-#define BSP_KEY_SPEED_MAX_HZ         (50.0f)     /* 3000 rpm */
+#define BSP_KEY_SPEED_MAX_HZ         (FOC_SPEED_TARGET_MAX_MECH_RAD_S * 0.15915494309f)
 
 typedef struct
 {

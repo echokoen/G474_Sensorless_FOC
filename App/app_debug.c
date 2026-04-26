@@ -24,8 +24,8 @@ void AppDebug_Task(void)
 {
   static uint32_t last_dbg_tick = 0u;
 
-  /* PWM 诊断打印降速到约 20 ms，避免串口拖慢系统。 */
-  if ((HAL_GetTick() - last_dbg_tick) < 20u)
+  /* 诊断打印降速到约 100 ms，避免阻塞式串口拖慢中频速度环。 */
+  if ((HAL_GetTick() - last_dbg_tick) < 100u)
   {
     return;
   }
@@ -45,36 +45,31 @@ void AppDebug_Task(void)
     (void)AppFoc_GetRuntimeSnapshot(&rt);
 
     {
-      const float obs_spd_elec_rad_s = rt.observer.speed_rad_s;
-      const float obs_spd_mech_rad_s = obs_spd_elec_rad_s / FOC_POLE_PAIRS;
-      const float vdq_mag_v = sqrtf((rt.current_loop.vd_cmd_v * rt.current_loop.vd_cmd_v) +
-                                    (rt.current_loop.vq_cmd_v * rt.current_loop.vq_cmd_v));
       /*
-       * RUN 速度/电压诊断：
-       * - speed_ref / obs_mech / speed_err：机械速度闭环是否追上；
-       * - iq_ref / iq：速度环要的电流和电流环实际跟踪；
-       * - vd/vq/vdq/vbus：判断是否电压余量不足。
+       * switchover 专用诊断：
+       * 只看接管状态、当前条件、失败原因、角度/速度误差和 blend 进度。
        */
-      printf("st=%u,sw=%u,obs_e=%.1f,obs_m=%.1f,pll_i=%.1f,pll_err=%.3f,"
-             "lim_s=%u,lim_i=%u,iq_ref=%.2f,iq=%.2f,id_ref=%.2f,id=%.2f,"
-             "vd=%.2f,vq=%.2f,vdq=%.2f/%.1f,vbus=%.1f\r\n",
-             (unsigned int)rt.state,
-             (unsigned int)rt.switchover.state,
-             obs_spd_elec_rad_s,
-             obs_spd_mech_rad_s,
-             rt.observer.pll_integral,
-             rt.observer.pll_err,
-             (unsigned int)rt.observer.speed_limit_hit,
-             (unsigned int)rt.observer.integral_limit_hit,
-             rt.current_loop.iq_ref_a,
-             rt.current_loop.iq_meas_a,
-             rt.current_loop.id_ref_a,
-             rt.current_loop.id_meas_a,
-             rt.current_loop.vd_cmd_v,
-             rt.current_loop.vq_cmd_v,
-             vdq_mag_v,
-             FOC_DQ_VOLT_LIMIT,
-             rt.sampling.vbus_v);
+      printf("state=%u,sw=%u,ready_now=%u,hold_ticks=%lu,fail_reason=0x%02X,"
+              "angle_err_deg=%.2f,open_speed_rad_s=%.1f,obs_speed_rad_s=%.1f,"
+              "speed_err_rad_s=%.1f,blend_k=%.3f,blend_reset_count=%lu,"
+              "speed_en=%u,speed_ref_mech_rad_s=%.1f,speed_target_mech_rad_s=%.1f,"
+              "speed_fdb_mech_rad_s=%.1f,iq_ref_cmd_a=%.2f\r\n",
+              (unsigned int)rt.state,
+              (unsigned int)rt.switchover.state,
+              (unsigned int)rt.switchover.ready_now,
+              (unsigned long)rt.switchover.hold_ticks,
+              (unsigned int)rt.switchover.fail_reason,
+              rt.switchover.angle_err_deg,
+             rt.switchover.open_speed_rad_s,
+              rt.switchover.obs_speed_rad_s,
+              rt.switchover.speed_err_rad_s,
+              rt.switchover.blend_k,
+              (unsigned long)rt.switchover.blend_reset_count,
+              (unsigned int)rt.speed_loop.enabled,
+              rt.speed_loop.speed_ref_mech_rad_s,
+              rt.speed_loop.speed_target_mech_rad_s,
+              rt.speed_loop.speed_fdb_mech_rad_s,
+              rt.speed_loop.iq_ref_cmd_a);
     }
 
   }

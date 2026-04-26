@@ -80,10 +80,10 @@ extern "C" {
 
 #define FOC_ID_REF_A                 (0.0f)      /* d 轴电流参考，第一阶段先不给励磁电流。 */
 #define FOC_IQ_REF_A                 (1.0f)      /* q 轴电流参考，增加低速开环跟随转矩。 */
-#define FOC_ID_KP                    (3.770f)    /* d 轴电流 PI 比例增益，约等于 FOC_LS_H * 2*pi*1000。 */
-#define FOC_ID_KI                    (3330.0f)   /* d 轴电流 PI 积分增益，约等于 FOC_RS_OHM * 2*pi*1000。 */
 #define FOC_IQ_KP                    (3.770f)    /* q 轴电流 PI 比例增益，第一阶段按 Ld=Lq=Ls 处理。 */
 #define FOC_IQ_KI                    (3330.0f)   /* q 轴电流 PI 积分增益，第一阶段按 d/q 同参数处理。 */
+#define FOC_ID_KP                    (FOC_IQ_KP * 0.5f)  /* d 轴 PI 先保守：比例为 q 轴一半。 */
+#define FOC_ID_KI                    (FOC_IQ_KI * 0.2f)  /* d 轴 PI 先保守：积分为 q 轴 20%。 */
 #define FOC_CURR_LOOP_V_LIMIT        (13.5f)      /* 单个 PI 输出电压限幅。 */
 #define FOC_DQ_VOLT_LIMIT            (13.5f)      /* dq 电压矢量总幅值限幅。 */
 #define FOC_VD_CMD_SIGN              (-1.0f)     /* d 轴电压输出极性，实测 +Vd 得到 -Id，因此这里取反。 */
@@ -123,12 +123,12 @@ extern "C" {
 #define FOC_OBS_ENABLE_FREQ_HZ       (10.0f)      /* 机械频率太低时，不对 observer 做锁定判定。 */
 #define FOC_OBS_LOCK_ERR_DEG         (25.0f)     /* 角差在这个范围内，才认为有机会锁住。 */
 #define FOC_OBS_LOCK_HOLD_MS         (200u)      /* 条件持续这么久，才把状态置为 locked。 */
-#define FOC_OBS_THETA_COMP_RAD       (2.8286f)    /* observer 角度补偿：原补偿 -0.4177 + pi，再按当前 ang≈+6deg 增加 0.1047rad。 */
-#define FOC_OBS_PLL_KP               (180.0f)    /* PLL 比例增益，调小可降低速度尖峰。 */
-#define FOC_OBS_PLL_KI               (6000.0f)   /* PLL 积分增益，调小可降低低速抖动。 */
+#define FOC_OBS_THETA_COMP_RAD       (2.2003f)    /* observer 角度补偿：当前 angle_err≈-36deg，补偿值减小 0.6283rad。 */
+#define FOC_OBS_PLL_KP               (120.0f)    /* PLL 比例增益，调小可降低速度尖峰。 */
+#define FOC_OBS_PLL_KI               (3000.0f)   /* PLL 积分增益，调小可降低低速抖动。 */
 #define FOC_OBS_PLL_INTEGRAL_LIMIT   (1800.0f)    /* PLL 积分项限幅，单位 rad/s。 */
 #define FOC_OBS_SPEED_LIMIT_RAD_S    (2200.0f)    /* observer 电角速度输出限幅。 */
-#define FOC_OBS_SPEED_FILTER_ALPHA   (0.20f)     /* observer 速度一阶滤波系数，0~1，越小越平滑。 */
+#define FOC_OBS_SPEED_FILTER_ALPHA   (0.05f)     /* observer 速度一阶滤波系数，0~1，越小越平滑。 */
 
 /* ==================== switchover 参数 ==================== */
 /* 开环到 observer 接管参数。
@@ -138,13 +138,13 @@ extern "C" {
 
 #define FOC_SWITCHOVER_ENABLE                   (1u)    /* 1=允许 observer 接管控制角，0=只后台观察。 */
 #define FOC_SWITCHOVER_MIN_MECH_FREQ_HZ         (10.0f)  /* 机械频率达到该值后，才允许进入接管判定。 */
-#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG        (10.0f) /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
+#define FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG        (15.0f) /* 开环角和 observer 角误差小于该值，才认为角度可信。 */
 #define FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO      (0.60f) /* observer 电角速度与开环电角速度允许的相对误差。 */
 #define FOC_SWITCHOVER_MAX_SPEED_ERR_MIN_RAD_S  (20.0f) /* 速度误差下限门限：低速时也保留一个最小绝对误差窗口。 */
-#define FOC_SWITCHOVER_HOLD_MS                  (250u)  /* 接管条件连续满足这么久，才进入混合阶段。 */
+#define FOC_SWITCHOVER_HOLD_MS                  (300u)  /* 接管条件连续满足这么久，才进入混合阶段。 */
 #define FOC_SWITCHOVER_BLEND_MS                 (800u)  /* 从开环角平滑过渡到 observer 角所用时间。 */
-#define FOC_SWITCHOVER_BLEND_MAX_ANGLE_ERR_DEG  (15.0f) /* BLEND 中放宽角度门限，避免单拍角度毛刺打回。 */
-#define FOC_SWITCHOVER_BLEND_FAIL_HOLD_TICKS    (5u)    /* BLEND 中连续失败这么多拍，才真正退回 OPENLOOP。 */
+#define FOC_SWITCHOVER_BLEND_MAX_ANGLE_ERR_DEG  (35.0f) /* BLEND 中放宽角度门限，避免单拍角度毛刺打回。 */
+#define FOC_SWITCHOVER_BLEND_FAIL_HOLD_TICKS    (20u)    /* BLEND 中连续失败这么多拍，才真正退回 OPENLOOP。 */
 
 /* ==================== 速度环参数 ==================== */
 /* 速度环当前是 RUN 阶段的外环，只输出 iq_ref。
@@ -152,8 +152,9 @@ extern "C" {
  */
 
 #define FOC_SPEED_REF_MECH_HZ        (12.0f)     /* RUN 阶段默认机械速度目标，当前版本进入 RUN 时先不直接跳到该值。 */
-#define FOC_SPEED_KP                 (0.08f)     /* 速度环比例增益，先保守一些，避免 observer 接管后 iq_ref 抽动。 */
-#define FOC_SPEED_KI                 (2.0f)      /* 速度环积分增益，第一版只求能稳，不求快。 */
+#define FOC_SPEED_TARGET_MAX_MECH_RAD_S (290.0f) /* 速度目标上限，单位机械 rad/s。 */
+#define FOC_SPEED_KP                 (0.12f)     /* 速度环比例增益；加快 RUN 后速度跟随。 */
+#define FOC_SPEED_KI                 (4.0f)      /* 速度环积分增益；提高低于目标速度时的补扭矩速度。 */
 #define FOC_SPEED_IQ_MIN_A           (0.5f)      /* RUN 后保留最小正扭矩底座，避免速度环把 iq_ref 拉得过低。 */
 #define FOC_SPEED_IQ_MAX_A           (7.0f)      /* 速度环输出的 q 轴电流上限，短时放开到 7A 验证速度余量。 */
 #define FOC_SPEED_ENABLE_DELAY_MS    (500u)      /* 进入 RUN 后先 observer-only hold 一小段，再真正开启速度环。 */
@@ -161,13 +162,11 @@ extern "C" {
 #define FOC_SPEED_FDB_FILTER_ALPHA   (0.08f)     /* RUN 阶段速度反馈一阶低通系数。 */
 #define FOC_SPEED_TAKEOVER_IQ_HOLD_A (0.30f)     /* 速度环刚接入后的最小正扭矩底座，避免 iq_ref 立即掉空。 */
 #define FOC_SPEED_TAKEOVER_HOLD_MS   (300u)      /* 速度环刚接入后的底座保持时间。 */
-#define FOC_RUN_IQ_ONLY_HOLD_MS      (2000u)     /* RUN 后 Iq-only 保持时间，独立于速度环延时。 */
-#define FOC_SPEED_IQ_SLEW_A_PER_S    (1.0f)      /* 隔离实验：速度环 iq_ref 最大变化率，避免输出突变。 */
+#define FOC_SPEED_IQ_SLEW_A_PER_S    (5.0f)      /* 速度环 iq_ref 最大变化率，避免输出突变，同时保证加速响应。 */
 #define FOC_SPEED_LOOP_ENABLE_IN_RUN (1u)        /* 隔离实验：1=RUN 阶段启用速度环，只让它输出 iq_ref。 */
-#define FOC_RUN_FORCE_IQ_ONLY        (0u)        /* 0=允许进入 d 轴软接管实验；1=RUN 阶段一直只跑 q 轴 PI。 */
-#define FOC_RUN_D_AXIS_SOFT_ENABLE   (1u)        /* 1=RUN 阶段 d 轴 PI 通过 d_axis_enable_k 软接管。 */
-#define FOC_RUN_D_AXIS_RAMP_MS       (1500u)     /* Iq-only hold 后，d_axis_enable_k 从 0 爬升到 1 的时间。 */
-#define FOC_RUN_D_AXIS_VD_LIMIT_V    (1.0f)      /* d 轴软接管第一版 vd_cmd 限幅，防止 d 轴突然注入过大。 */
+#define FOC_D_AXIS_SOFT_RAMP_MS      (1000u)     /* OPENLOOP 开始后，d_axis_gain 从 0 爬升到 1 的时间。 */
+#define FOC_D_AXIS_VD_LIMIT_START_V  (1.0f)      /* d 轴刚释放时的 vd 单独限幅。 */
+#define FOC_D_AXIS_VD_LIMIT_END_V    (4.0f)      /* d 轴释放完成后的 vd 单独限幅，第一版不超过 ±4V。 */
 
 /* ==================== 保护参数 ==================== */
 /* 软件保护阈值。
