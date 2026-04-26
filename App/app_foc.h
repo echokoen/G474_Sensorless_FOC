@@ -103,6 +103,12 @@ uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
  */
 uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot);
 
+/* 获取/清空高频 ISR 执行时间统计。
+ * 统计基于 Cortex-M DWT->CYCCNT，只记录 cycle，不在高频中断打印。
+ */
+uint8_t AppFoc_GetHfTimingSnapshot(FOC_HfTimingSnapshot_t *snapshot);
+void AppFoc_ResetHfTimingStats(void);
+
 uint8_t AppFoc_GetFaultSnapshot(FOC_FaultSnapshot_t *snapshot);
 void AppFoc_ClearFaultSnapshot(void);
 

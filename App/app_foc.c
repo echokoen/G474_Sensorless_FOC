@@ -34,6 +34,7 @@
 #include "foc_pwm.h"
 #include "foc_sampling.h"
 #include "foc_switchover.h"
+#include "stm32g4xx_hal.h"
 #include <math.h>
 
 extern TIM_HandleTypeDef htim1;
@@ -102,6 +103,10 @@ static volatile AppFoc_Command_t s_cmd_active = {FOC_STATE_IDLE, APP_FOC_THETA_M
 static AppFoc_Feedback_t s_feedback = {0};
 static volatile FOC_RuntimeSnapshot_t s_runtime_snapshot;
 static volatile uint32_t s_runtime_seq = 0u;
+#if (APP_DWT_TIMING_ENABLE != 0u)
+static volatile FOC_HfTimingSnapshot_t s_hf_timing_snapshot;
+static volatile uint32_t s_hf_timing_seq = 0u;
+#endif
 static FOC_FaultSnapshot_t s_fault_snapshot = {0};
 static uint32_t s_last_medium_tick_ms = 0u;
 static float s_medium_task_dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
@@ -133,6 +138,100 @@ static uint8_t s_run_entry_prepared = 0u;
 static uint8_t s_last_dt_enable = 0u;
 static float s_d_axis_enable_k = 0.0f;
 static float s_d_axis_vd_limit_v = FOC_D_AXIS_VD_LIMIT_START_V;
+
+#if (APP_DWT_TIMING_ENABLE != 0u)
+static uint32_t app_foc_dwt_threshold_cycles(void)
+{
+  uint32_t cycles_per_us = SystemCoreClock / 1000000u;
+
+  if (cycles_per_us == 0u)
+  {
+    cycles_per_us = 1u;
+  }
+
+  return cycles_per_us * APP_DWT_TIMING_OVERRUN_US;
+}
+
+static void app_foc_hf_timing_reset_internal(void)
+{
+  s_hf_timing_seq++;
+  s_hf_timing_snapshot.enabled = 1u;
+  s_hf_timing_snapshot.sample_count = 0u;
+  s_hf_timing_snapshot.last_cycles = 0u;
+  s_hf_timing_snapshot.min_cycles = 0u;
+  s_hf_timing_snapshot.max_cycles = 0u;
+  s_hf_timing_snapshot.avg_cycles = 0u;
+  s_hf_timing_snapshot.threshold_cycles = app_foc_dwt_threshold_cycles();
+  s_hf_timing_snapshot.overrun_count = 0u;
+  s_hf_timing_seq++;
+}
+
+static void app_foc_dwt_init(void)
+{
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0u;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  app_foc_hf_timing_reset_internal();
+}
+
+static uint32_t app_foc_dwt_get_cycle(void)
+{
+  return DWT->CYCCNT;
+}
+
+static void app_foc_hf_timing_update(uint32_t cycles)
+{
+  uint32_t avg;
+
+  s_hf_timing_seq++;
+  s_hf_timing_snapshot.last_cycles = cycles;
+
+  if (s_hf_timing_snapshot.sample_count == 0u)
+  {
+    s_hf_timing_snapshot.min_cycles = cycles;
+    s_hf_timing_snapshot.max_cycles = cycles;
+    s_hf_timing_snapshot.avg_cycles = cycles;
+  }
+  else
+  {
+    if (cycles < s_hf_timing_snapshot.min_cycles)
+    {
+      s_hf_timing_snapshot.min_cycles = cycles;
+    }
+    if (cycles > s_hf_timing_snapshot.max_cycles)
+    {
+      s_hf_timing_snapshot.max_cycles = cycles;
+    }
+
+    avg = s_hf_timing_snapshot.avg_cycles;
+    if (cycles >= avg)
+    {
+      avg += ((cycles - avg) >> 4);
+    }
+    else
+    {
+      avg -= ((avg - cycles) >> 4);
+    }
+    s_hf_timing_snapshot.avg_cycles = avg;
+  }
+
+  if (s_hf_timing_snapshot.sample_count < 0xFFFFFFFFu)
+  {
+    s_hf_timing_snapshot.sample_count++;
+  }
+
+  if ((s_hf_timing_snapshot.threshold_cycles != 0u) &&
+      (cycles > s_hf_timing_snapshot.threshold_cycles))
+  {
+    if (s_hf_timing_snapshot.overrun_count < 0xFFFFFFFFu)
+    {
+      s_hf_timing_snapshot.overrun_count++;
+    }
+  }
+
+  s_hf_timing_seq++;
+}
+#endif
 
 static float app_foc_clampf(float x, float lo, float hi)
 {
@@ -1029,6 +1128,9 @@ void AppFoc_Init(void)
 {
   /* 初始化所有控制对象，并回到一个安全静止状态。 */
   s_state = FOC_STATE_IDLE;
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  app_foc_dwt_init();
+#endif
 
   FOC_SamplingModule_Init(&s_sampling);
   FOC_PwmModule_Init(&s_pwm);
@@ -1107,6 +1209,9 @@ void AppFoc_Start(void)
   s_feedback.fault_flags = 0u;
   s_fault_flags = FOC_FAULT_NONE;
   AppFoc_ClearFaultSnapshot();
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  AppFoc_ResetHfTimingStats();
+#endif
   app_foc_speed_loop_reset(0.0f);
   app_foc_d_axis_soft_reset();
   s_run_entry_prepared = 0u;
@@ -1165,6 +1270,10 @@ void AppFoc_MediumFreqTask(void)
 
 void AppFoc_HighFreqTask(void)
 {
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  const uint32_t hf_start_cycles = app_foc_dwt_get_cycle();
+#endif
+
   /*
    * 高频状态机只负责“这一拍该跑什么”。
    * 复杂的外部命令和低频业务不放在这里，
@@ -1218,6 +1327,10 @@ void AppFoc_HighFreqTask(void)
   /* 高频采样/PWM细节快照默认关闭；排查采样时再打开。 */
   FOC_DebugModule_UpdateSnapshot(&s_debug, &s_sampling, &s_pwm);
 #endif
+
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  app_foc_hf_timing_update(app_foc_dwt_get_cycle() - hf_start_cycles);
+#endif
 }
 
 FOC_StateTypeDef AppFoc_GetState(void)
@@ -1264,6 +1377,49 @@ uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot)
   } while (--retry != 0u);
 
   return 0u;
+}
+
+uint8_t AppFoc_GetHfTimingSnapshot(FOC_HfTimingSnapshot_t *snapshot)
+{
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  uint32_t seq_start;
+  uint32_t seq_end;
+  uint8_t retry = 8u;
+
+  if (snapshot == 0)
+  {
+    return 0u;
+  }
+
+  do
+  {
+    seq_start = s_hf_timing_seq;
+    if ((seq_start & 1u) != 0u)
+    {
+      continue;
+    }
+
+    *snapshot = s_hf_timing_snapshot;
+    seq_end = s_hf_timing_seq;
+
+    if ((seq_start == seq_end) && ((seq_end & 1u) == 0u))
+    {
+      return 1u;
+    }
+  } while (--retry != 0u);
+
+  return 0u;
+#else
+  (void)snapshot;
+  return 0u;
+#endif
+}
+
+void AppFoc_ResetHfTimingStats(void)
+{
+#if (APP_DWT_TIMING_ENABLE != 0u)
+  app_foc_hf_timing_reset_internal();
+#endif
 }
 
 uint8_t AppFoc_GetFaultSnapshot(FOC_FaultSnapshot_t *snapshot)

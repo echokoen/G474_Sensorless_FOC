@@ -209,6 +209,21 @@ typedef struct
   FOC_SwitchoverSnapshot_t switchover;      /* 切换状态。 */
 } FOC_RuntimeSnapshot_t;
 
+/* 高频任务耗时统计快照。
+ * cycles 字段单位为 CPU cycle；us 换算放在低频打印侧完成，避免高频中断做浮点除法。
+ */
+typedef struct
+{
+  uint8_t enabled;             /* 1=DWT 统计已启用。 */
+  uint32_t sample_count;       /* 已统计的高频任务次数，饱和计数。 */
+  uint32_t last_cycles;        /* 最近一次高频任务耗时。 */
+  uint32_t min_cycles;         /* 最小耗时。 */
+  uint32_t max_cycles;         /* 最大耗时。 */
+  uint32_t avg_cycles;         /* 指数滑动平均耗时。 */
+  uint32_t threshold_cycles;   /* overrun 判断阈值。 */
+  uint32_t overrun_count;      /* 超过阈值次数。 */
+} FOC_HfTimingSnapshot_t;
+
 typedef struct
 {
   uint8_t valid;

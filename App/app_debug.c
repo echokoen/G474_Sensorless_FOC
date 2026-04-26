@@ -62,6 +62,29 @@ void AppDebug_Task(void)
            rt.sampling.iw_a,
            (unsigned int)rt.sampling.used_hold_last_current,
            (unsigned int)rt.sampling.fallback_hold_count);
+
+#if ((APP_DWT_TIMING_ENABLE != 0u) && (APP_DWT_TIMING_PRINT_ENABLE != 0u))
+    {
+      FOC_HfTimingSnapshot_t hf;
+      const float cycles_to_us = 1000000.0f / (float)SystemCoreClock;
+
+      memset(&hf, 0, sizeof(hf));
+      if (AppFoc_GetHfTimingSnapshot(&hf) != 0u)
+      {
+        printf("hf_cycle last=%lu,min=%lu,max=%lu,avg=%lu,thr=%lu,ov=%lu,"
+               "hf_us last=%.2f,max=%.2f,avg=%.2f\r\n",
+               (unsigned long)hf.last_cycles,
+               (unsigned long)hf.min_cycles,
+               (unsigned long)hf.max_cycles,
+               (unsigned long)hf.avg_cycles,
+               (unsigned long)hf.threshold_cycles,
+               (unsigned long)hf.overrun_count,
+               (float)hf.last_cycles * cycles_to_us,
+               (float)hf.max_cycles * cycles_to_us,
+               (float)hf.avg_cycles * cycles_to_us);
+      }
+    }
+#endif
   }
 #else
   /* 调试打印关闭时保持接口存在，main.c 不需要条件编译。 */
