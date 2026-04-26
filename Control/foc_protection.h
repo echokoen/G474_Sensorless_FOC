@@ -4,12 +4,11 @@
 extern "C" {
 #endif
 #include "foc_types.h"
-#include "foc_pwm.h"
 #include "foc_sampling.h"
 
 /* 保护模块接口。
  *
- * 提供故障检测与停机封装接口。
+ * 只提供故障检测接口，停机动作由 App 层统一执行。
  */
 
 /* 故障原因位图。
@@ -31,13 +30,6 @@ typedef enum
 } FOC_FaultFlags_t;
 
 uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling);
-
-/* 执行统一保护停机：
- * - PWM 回中点；
- * - 关闭驱动使能；
- * - 状态切到 FAULT。
- */
-void FOC_ProtectionApplyStop(FOC_StateTypeDef *state, FOC_PwmData_t *pwm);
 #ifdef __cplusplus
 }
 

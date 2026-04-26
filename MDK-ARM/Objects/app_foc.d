@@ -2,6 +2,7 @@ objects\app_foc.o: ..\App\app_foc.c
 objects\app_foc.o: ..\App\app_foc.h
 objects\app_foc.o: ..\Control\foc_types.h
 objects\app_foc.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+objects\app_foc.o: ..\App\app_foc_timing.h
 objects\app_foc.o: ../Core/Inc/PMSM_Control_Core/FluxObserver_PLL.h
 objects\app_foc.o: ../Core/Inc/main.h
 objects\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h
@@ -42,17 +43,17 @@ objects\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h
 objects\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\app_foc.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 objects\app_foc.o: ../Core/Inc/foc_config.h
-objects\app_foc.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
 objects\app_foc.o: ../Drivers/BSP/bsp_key.h
 objects\app_foc.o: ../Drivers/BSP/bsp_adc.h
 objects\app_foc.o: ../Drivers/BSP/bsp_gpio.h
 objects\app_foc.o: ../Drivers/BSP/bsp_tim.h
 objects\app_foc.o: ..\Control\foc_current_loop.h
+objects\app_foc.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
 objects\app_foc.o: ../Core/Inc/PMSM_Control_Core/Clarke_Park.h
 objects\app_foc.o: ..\Control\foc_sampling.h
 objects\app_foc.o: ..\Control\foc_observer.h
 objects\app_foc.o: ..\Control\foc_openloop.h
 objects\app_foc.o: ..\Control\foc_protection.h
 objects\app_foc.o: ..\Control\foc_pwm.h
+objects\app_foc.o: ..\Control\foc_speed_loop.h
 objects\app_foc.o: ..\Control\foc_switchover.h
-objects\app_foc.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

@@ -22,9 +22,12 @@ typedef struct
 {
   uint8_t observer_ready;   /* 最终接管就绪标志：满足保持时间后才会置位。 */
   uint8_t ready_now;        /* 当前这一拍是否满足接管条件，主要用于调试观察。 */
+  uint8_t locked;           /* observer 基础锁定判定结果，兼容旧 observer locked 语义。 */
   uint32_t hold_ticks;      /* 连续满足条件的保持计数。 */
+  uint32_t lock_hold_ticks; /* observer 基础锁定条件连续满足计数。 */
   uint32_t blend_ticks;     /* 混合接管已经持续的 tick 数。 */
   float blend_k;            /* 开环角 -> observer 角的混合系数。 */
+  float angle_err_deg;      /* 开环角与 observer 角之间的误差，单位 deg。 */
   float open_speed_rad_s;   /* 当前开环电角速度，供调试查看。 */
   float obs_speed_rad_s;    /* 当前 observer 电角速度，供调试查看。 */
   float speed_err_rad_s;    /* 当前速度误差绝对值，供调试查看。 */

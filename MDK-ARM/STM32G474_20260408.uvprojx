@@ -465,6 +465,16 @@
               <FilePath>..\App\app_foc.c</FilePath>
             </File>
             <File>
+              <FileName>app_foc_timing.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\app_foc_timing.h</FilePath>
+            </File>
+            <File>
+              <FileName>app_foc_timing.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\app_foc_timing.c</FilePath>
+            </File>
+            <File>
               <FileName>app_debug.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\App\app_debug.h</FilePath>
@@ -523,6 +533,16 @@
               <FileName>foc_current_loop.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Control\foc_current_loop.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_speed_loop.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Control\foc_speed_loop.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_speed_loop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_speed_loop.c</FilePath>
             </File>
             <File>
               <FileName>foc_openloop.h</FileName>

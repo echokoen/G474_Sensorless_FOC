@@ -1,4 +1,5 @@
 #include "app_foc.h"
+#include "app_foc_timing.h"
 
 /*
  * FOC 应用层编排实现。
@@ -12,7 +13,6 @@
  */
 
 #include "PMSM_Control_Core/FluxObserver_PLL.h"
-#include "PMSM_Control_Core/PI_Controller.h"
 #include "bsp_key.h"
 #include "bsp_adc.h"
 #include "bsp_gpio.h"
@@ -33,9 +33,9 @@
 #include "foc_protection.h"
 #include "foc_pwm.h"
 #include "foc_sampling.h"
+#include "foc_speed_loop.h"
 #include "foc_switchover.h"
 #include "stm32g4xx_hal.h"
-#include <math.h>
 
 extern TIM_HandleTypeDef htim1;
 extern ADC_HandleTypeDef hadc1;
@@ -61,6 +61,7 @@ static FOC_CurrentLoopData_t s_current_loop = {0};
 static FOC_OpenLoopData_t s_openloop = {0};
 static FOC_ObserverData_t s_observer = {0};
 static FOC_SwitchoverData_t s_switchover = {0};
+static FOC_SpeedLoopData_t s_speed_loop = {0};
 static uint32_t s_fault_flags = FOC_FAULT_NONE;
 
 /* 中频任务节拍与流程常量。
@@ -103,135 +104,15 @@ static volatile AppFoc_Command_t s_cmd_active = {FOC_STATE_IDLE, APP_FOC_THETA_M
 static AppFoc_Feedback_t s_feedback = {0};
 static volatile FOC_RuntimeSnapshot_t s_runtime_snapshot;
 static volatile uint32_t s_runtime_seq = 0u;
-#if (APP_DWT_TIMING_ENABLE != 0u)
-static volatile FOC_HfTimingSnapshot_t s_hf_timing_snapshot;
-static volatile uint32_t s_hf_timing_seq = 0u;
-#endif
 static FOC_FaultSnapshot_t s_fault_snapshot = {0};
 static uint32_t s_last_medium_tick_ms = 0u;
 static float s_medium_task_dt_sec = APP_FOC_MEDIUM_TASK_PERIOD_MS * 0.001f;
 
-/* 最小速度环。
- *
- * 设计原则：
- * - 只在 RUN 阶段启用；
- * - 只输出 q 轴电流参考，不碰 d 轴；
- * - 输出先限制为非负，避免当前调试阶段引入制动扭矩；
- * - 刚进入 RUN 时先用当前反馈初始化速度给定，再缓慢斜坡到目标值。
- */
-typedef struct
-{
-  PIController_t pi;
-  float speed_ref_cmd_mech_rad_s;      /* 当前速度环参考（机械 rad/s）。 */
-  float speed_target_mech_rad_s;       /* 目标速度（机械 rad/s）。 */
-  float speed_fdb_mech_rad_s;          /* 低通后的速度反馈（机械 rad/s）。 */
-  float speed_fdb_raw_mech_rad_s;      /* 原始 observer 速度（机械 rad/s）。 */
-  float iq_ref_cmd_a;                  /* 速度环给出的 q 轴电流给定。 */
-  uint32_t run_entry_tick_ms;          /* 进入 RUN 的时刻。 */
-  uint32_t speed_enable_tick_ms;       /* 速度环真正开始接管的时刻。 */
-  uint8_t enabled;                     /* 1=速度环已接管。 */
-} AppFoc_SpeedLoop_t;
-
-static AppFoc_SpeedLoop_t s_speed_loop = {0};
 static uint32_t s_d_axis_soft_start_ms = 0u;
 static uint8_t s_run_entry_prepared = 0u;
 static uint8_t s_last_dt_enable = 0u;
 static float s_d_axis_enable_k = 0.0f;
 static float s_d_axis_vd_limit_v = FOC_D_AXIS_VD_LIMIT_START_V;
-
-#if (APP_DWT_TIMING_ENABLE != 0u)
-static uint32_t app_foc_dwt_threshold_cycles(void)
-{
-  uint32_t cycles_per_us = SystemCoreClock / 1000000u;
-
-  if (cycles_per_us == 0u)
-  {
-    cycles_per_us = 1u;
-  }
-
-  return cycles_per_us * APP_DWT_TIMING_OVERRUN_US;
-}
-
-static void app_foc_hf_timing_reset_internal(void)
-{
-  s_hf_timing_seq++;
-  s_hf_timing_snapshot.enabled = 1u;
-  s_hf_timing_snapshot.sample_count = 0u;
-  s_hf_timing_snapshot.last_cycles = 0u;
-  s_hf_timing_snapshot.min_cycles = 0u;
-  s_hf_timing_snapshot.max_cycles = 0u;
-  s_hf_timing_snapshot.avg_cycles = 0u;
-  s_hf_timing_snapshot.threshold_cycles = app_foc_dwt_threshold_cycles();
-  s_hf_timing_snapshot.overrun_count = 0u;
-  s_hf_timing_seq++;
-}
-
-static void app_foc_dwt_init(void)
-{
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  DWT->CYCCNT = 0u;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-  app_foc_hf_timing_reset_internal();
-}
-
-static uint32_t app_foc_dwt_get_cycle(void)
-{
-  return DWT->CYCCNT;
-}
-
-static void app_foc_hf_timing_update(uint32_t cycles)
-{
-  uint32_t avg;
-
-  s_hf_timing_seq++;
-  s_hf_timing_snapshot.last_cycles = cycles;
-
-  if (s_hf_timing_snapshot.sample_count == 0u)
-  {
-    s_hf_timing_snapshot.min_cycles = cycles;
-    s_hf_timing_snapshot.max_cycles = cycles;
-    s_hf_timing_snapshot.avg_cycles = cycles;
-  }
-  else
-  {
-    if (cycles < s_hf_timing_snapshot.min_cycles)
-    {
-      s_hf_timing_snapshot.min_cycles = cycles;
-    }
-    if (cycles > s_hf_timing_snapshot.max_cycles)
-    {
-      s_hf_timing_snapshot.max_cycles = cycles;
-    }
-
-    avg = s_hf_timing_snapshot.avg_cycles;
-    if (cycles >= avg)
-    {
-      avg += ((cycles - avg) >> 4);
-    }
-    else
-    {
-      avg -= ((avg - cycles) >> 4);
-    }
-    s_hf_timing_snapshot.avg_cycles = avg;
-  }
-
-  if (s_hf_timing_snapshot.sample_count < 0xFFFFFFFFu)
-  {
-    s_hf_timing_snapshot.sample_count++;
-  }
-
-  if ((s_hf_timing_snapshot.threshold_cycles != 0u) &&
-      (cycles > s_hf_timing_snapshot.threshold_cycles))
-  {
-    if (s_hf_timing_snapshot.overrun_count < 0xFFFFFFFFu)
-    {
-      s_hf_timing_snapshot.overrun_count++;
-    }
-  }
-
-  s_hf_timing_seq++;
-}
-#endif
 
 static float app_foc_clampf(float x, float lo, float hi)
 {
@@ -250,39 +131,6 @@ static float app_foc_mech_hz_to_rad_s(float mech_hz)
 {
   const float two_pi = 6.28318530718f;
   return mech_hz * two_pi;
-}
-
-static float app_foc_elec_rad_s_to_mech_rad_s(float elec_rad_s)
-{
-  const float inv_pole_pairs = 1.0f / FOC_POLE_PAIRS;
-  return elec_rad_s * inv_pole_pairs;
-}
-
-static float app_foc_ramp_to_target(float current, float target, float step_abs)
-{
-  if (step_abs <= 0.0f)
-  {
-    return target;
-  }
-
-  if (current < target)
-  {
-    current += step_abs;
-    if (current > target)
-    {
-      current = target;
-    }
-  }
-  else if (current > target)
-  {
-    current -= step_abs;
-    if (current < target)
-    {
-      current = target;
-    }
-  }
-
-  return current;
 }
 
 static void app_foc_commit_command_active(void)
@@ -312,143 +160,23 @@ static AppFoc_Command_t app_foc_get_active_command(void)
   return cmd;
 }
 
-static void app_foc_speed_loop_init(void)
-{
-  PIController_Init(&s_speed_loop.pi,
-                    FOC_SPEED_KP,
-                    FOC_SPEED_KI,
-                    FOC_SPEED_IQ_MIN_A,
-                    FOC_SPEED_IQ_MAX_A);
-  PIController_Reset(&s_speed_loop.pi);
-  s_speed_loop.speed_ref_cmd_mech_rad_s = 0.0f;
-  s_speed_loop.speed_target_mech_rad_s = 0.0f;
-  s_speed_loop.speed_fdb_mech_rad_s = 0.0f;
-  s_speed_loop.speed_fdb_raw_mech_rad_s = 0.0f;
-  s_speed_loop.iq_ref_cmd_a = 0.0f;
-  s_speed_loop.run_entry_tick_ms = 0u;
-  s_speed_loop.speed_enable_tick_ms = 0u;
-  s_speed_loop.enabled = 0u;
-}
-
-static void app_foc_speed_loop_reset(float speed_init_mech_rad_s)
-{
-  PIController_Reset(&s_speed_loop.pi);
-  s_speed_loop.speed_fdb_mech_rad_s = speed_init_mech_rad_s;
-  s_speed_loop.speed_fdb_raw_mech_rad_s = speed_init_mech_rad_s;
-  s_speed_loop.speed_ref_cmd_mech_rad_s = speed_init_mech_rad_s;
-  s_speed_loop.speed_target_mech_rad_s = speed_init_mech_rad_s;
-  s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
-  s_speed_loop.run_entry_tick_ms = HAL_GetTick();
-  s_speed_loop.speed_enable_tick_ms = 0u;
-  s_speed_loop.enabled = 0u;
-}
-
 static void app_foc_prepare_run_entry(void)
 {
   /* OPENLOOP -> RUN 是在中频状态机内部直接改 s_state 的，
    * 如果只依赖下一拍的 state_changed，会错过 RUN 的入口初始化。
    * 因此这里把 RUN 首拍需要的准备收口成一个显式入口函数。 */
-  float speed_init_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
+  FOC_SpeedLoopSnapshot_t speed_snapshot;
 
-  if (fabsf(speed_init_mech_rad_s) < 1.0f)
-  {
-    speed_init_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(
-        FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop));
-  }
-
-  app_foc_speed_loop_reset(speed_init_mech_rad_s);
+  FOC_SpeedLoopPrepareRunEntry(&s_speed_loop,
+                               s_observer.speed_rad_s,
+                               FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop));
 
   /* RUN 入口不再清电流环 PI。
    * Id/Iq 双环已经在 OPENLOOP 阶段逐步接管，RUN 只切换角度来源和速度环给定。 */
   s_run_entry_prepared = 1u;
-  {
-    const float inv_two_pi = 0.15915494309f;
-    BSP_KEY_SetSpeedTargetHz(speed_init_mech_rad_s * inv_two_pi);
-  }
-}
 
-static uint8_t app_foc_speed_loop_is_enabled(void)
-{
-  return s_speed_loop.enabled;
-}
-
-static void app_foc_speed_loop_step(float dt_sec)
-{
-#if (FOC_SPEED_LOOP_ENABLE_IN_RUN == 0u)
-  s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
-  s_speed_loop.speed_fdb_mech_rad_s = s_speed_loop.speed_fdb_raw_mech_rad_s;
-  s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
-  s_speed_loop.enabled = 0u;
-  return;
-#else
-  const float speed_alpha = app_foc_clampf(FOC_SPEED_FDB_FILTER_ALPHA, 0.0f, 1.0f);
-  const uint32_t now_ms = HAL_GetTick();
-  float iq_cmd;
-
-  dt_sec = app_foc_clampf(dt_sec, 0.001f, 0.100f);
-
-  s_speed_loop.speed_fdb_raw_mech_rad_s = app_foc_elec_rad_s_to_mech_rad_s(s_observer.speed_rad_s);
-  s_speed_loop.speed_fdb_mech_rad_s += speed_alpha *
-      (s_speed_loop.speed_fdb_raw_mech_rad_s - s_speed_loop.speed_fdb_mech_rad_s);
-
-  if (s_speed_loop.enabled == 0u)
-  {
-    /* observer 接管后的缓冲窗口：
-     * - 保持 I/F 末端的正扭矩，避免刚入 RUN 就失去拉力；
-     * - 同时让速度反馈滤波值先稳定下来。 */
-    s_speed_loop.iq_ref_cmd_a = FOC_IQ_REF_A;
-
-    if ((now_ms - s_speed_loop.run_entry_tick_ms) >= FOC_SPEED_ENABLE_DELAY_MS)
-    {
-      PIController_Reset(&s_speed_loop.pi);
-      s_speed_loop.speed_enable_tick_ms = now_ms;
-      s_speed_loop.enabled = 1u;
-    }
-    return;
-  }
-
-  s_speed_loop.speed_ref_cmd_mech_rad_s = app_foc_ramp_to_target(
-      s_speed_loop.speed_ref_cmd_mech_rad_s,
-      s_speed_loop.speed_target_mech_rad_s,
-      FOC_SPEED_REF_RAMP_HZ_PER_S * 6.28318530718f * dt_sec);
-
-  iq_cmd = PIController_Run(&s_speed_loop.pi,
-                            s_speed_loop.speed_ref_cmd_mech_rad_s,
-                            s_speed_loop.speed_fdb_mech_rad_s,
-                            dt_sec);
-
-  if ((now_ms - s_speed_loop.speed_enable_tick_ms) < FOC_SPEED_TAKEOVER_HOLD_MS)
-  {
-    if (iq_cmd < FOC_SPEED_TAKEOVER_IQ_HOLD_A)
-    {
-      iq_cmd = FOC_SPEED_TAKEOVER_IQ_HOLD_A;
-    }
-  }
-
-  {
-    const float iq_target_a = app_foc_clampf(iq_cmd,
-                                             FOC_SPEED_IQ_MIN_A,
-                                             FOC_SPEED_IQ_MAX_A);
-    const float iq_step_a = FOC_SPEED_IQ_SLEW_A_PER_S * dt_sec;
-
-    if (iq_target_a > (s_speed_loop.iq_ref_cmd_a + iq_step_a))
-    {
-      s_speed_loop.iq_ref_cmd_a += iq_step_a;
-    }
-    else if (iq_target_a < (s_speed_loop.iq_ref_cmd_a - iq_step_a))
-    {
-      s_speed_loop.iq_ref_cmd_a -= iq_step_a;
-    }
-    else
-    {
-      s_speed_loop.iq_ref_cmd_a = iq_target_a;
-    }
-
-    s_speed_loop.iq_ref_cmd_a = app_foc_clampf(s_speed_loop.iq_ref_cmd_a,
-                                               FOC_SPEED_IQ_MIN_A,
-                                               FOC_SPEED_IQ_MAX_A);
-  }
-#endif
+  FOC_SpeedLoopGetSnapshot(&s_speed_loop, &speed_snapshot);
+  BSP_KEY_SetSpeedTargetHz(speed_snapshot.speed_ref_mech_rad_s * 0.15915494309f);
 }
 
 static void app_foc_d_axis_soft_reset(void)
@@ -529,6 +257,12 @@ static void app_foc_sampling_update(void)
 static void app_foc_force_mid_output(void)
 {
   FOC_PwmModule_SetTim1Mid(&s_pwm);
+}
+
+static void app_foc_shutdown_outputs(void)
+{
+  FOC_PwmModule_SetTim1Mid(&s_pwm);
+  app_foc_drive_enable(0u);
 }
 
 
@@ -635,8 +369,12 @@ static void app_foc_latch_fault_snapshot(void)
 
   s_fault_snapshot.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
   s_fault_snapshot.obs_speed_rad_s = s_observer.speed_rad_s;
-  s_fault_snapshot.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
-  s_fault_snapshot.speed_fdb_mech_rad_s = s_speed_loop.speed_fdb_mech_rad_s;
+  {
+    FOC_SpeedLoopSnapshot_t speed_snapshot;
+    FOC_SpeedLoopGetSnapshot(&s_speed_loop, &speed_snapshot);
+    s_fault_snapshot.speed_ref_mech_rad_s = speed_snapshot.speed_ref_mech_rad_s;
+    s_fault_snapshot.speed_fdb_mech_rad_s = speed_snapshot.speed_fdb_mech_rad_s;
+  }
 
   s_fault_snapshot.vbus_v = s_sampling.vbus_v;
 
@@ -647,14 +385,16 @@ static void app_foc_latch_fault_snapshot(void)
 }
 
 /*
- * 收口到故障状态。
+ * 统一进入故障状态。
  *
- * 该函数本身不做复杂判定，只调用保护模块统一执行：
- * - 关闭驱动；
+ * App 层统一执行停机动作：
+ * - 记录兜底故障位；
+ * - 锁存首次故障现场；
  * - PWM 回中点；
+ * - 关闭驱动；
  * - 状态锁到 FAULT。
  */
-static void app_foc_stop_to_fault(void)
+static void app_foc_enter_fault(void)
 {
   if (s_fault_flags == FOC_FAULT_NONE)
   {
@@ -662,7 +402,8 @@ static void app_foc_stop_to_fault(void)
     s_fault_flags = 0x80000000u;
   }
   app_foc_latch_fault_snapshot();
-  FOC_ProtectionApplyStop((FOC_StateTypeDef *)&s_state, &s_pwm);
+  app_foc_shutdown_outputs();
+  s_state = FOC_STATE_FAULT;
 }
 
 /*
@@ -692,9 +433,9 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->observer.flux_theta_rad = FOC_ObserverGetFluxThetaRad(&s_observer);
   snapshot->observer.theta_rad = s_observer.theta_rad;
   snapshot->observer.speed_rad_s = s_observer.speed_rad_s;
-  snapshot->observer.angle_err_deg = s_observer.angle_err_deg;
+  snapshot->observer.angle_err_deg = s_switchover.angle_err_deg;
   snapshot->observer.vbus_v = s_sampling.vbus_v;
-  snapshot->observer.locked = s_observer.locked;
+  snapshot->observer.locked = s_switchover.locked;
   snapshot->observer.pll_err = s_observer.flux_obs.pll_err;
   snapshot->observer.pll_integral = s_observer.flux_obs.pll_integral;
   snapshot->observer.pll_speed_raw_rad_s = s_observer.flux_obs.pll_speed_raw_rad_s;
@@ -755,23 +496,21 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->current_loop.dt_enable = s_last_dt_enable;
 
   /* 速度环信息。 */
-  snapshot->speed_loop.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
-  snapshot->speed_loop.speed_target_mech_rad_s = s_speed_loop.speed_target_mech_rad_s;
-  snapshot->speed_loop.speed_fdb_mech_rad_s = s_speed_loop.speed_fdb_mech_rad_s;
-  snapshot->speed_loop.iq_ref_cmd_a = s_speed_loop.iq_ref_cmd_a;
-  snapshot->speed_loop.enabled = app_foc_speed_loop_is_enabled();
+  FOC_SpeedLoopGetSnapshot(&s_speed_loop, &snapshot->speed_loop);
 
   /* 开环到观测器切换信息。 */
   snapshot->switchover.state = (uint8_t)s_switchover.state;
   snapshot->switchover.observer_ready = s_switchover.observer_ready;
   snapshot->switchover.ready_now = s_switchover.ready_now;
+  snapshot->switchover.locked = s_switchover.locked;
   snapshot->switchover.hold_ticks = s_switchover.hold_ticks;
+  snapshot->switchover.lock_hold_ticks = s_switchover.lock_hold_ticks;
   snapshot->switchover.blend_ticks = s_switchover.blend_ticks;
   snapshot->switchover.blend_k = s_switchover.blend_k;
   snapshot->switchover.theta_open_rad = s_openloop.theta_e_rad;
   snapshot->switchover.theta_obs_rad = s_observer.theta_rad;
   snapshot->switchover.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
-  snapshot->switchover.angle_err_deg = s_observer.angle_err_deg;
+  snapshot->switchover.angle_err_deg = s_switchover.angle_err_deg;
   snapshot->switchover.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
   snapshot->switchover.obs_speed_rad_s = s_observer.speed_rad_s;
   snapshot->switchover.speed_err_rad_s = s_switchover.speed_err_rad_s;
@@ -818,7 +557,7 @@ static void app_foc_run_align(void)
   s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
-    app_foc_stop_to_fault();
+    app_foc_enter_fault();
     return;
   }
 
@@ -876,7 +615,7 @@ static void app_foc_run_openloop(void)
   s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
-    app_foc_stop_to_fault();
+    app_foc_enter_fault();
     return;
   }
 
@@ -908,9 +647,7 @@ static void app_foc_run_openloop(void)
   FOC_ObserverUpdate(&s_observer,
                      &s_sampling,
                      valpha,
-                     vbeta,
-                     s_openloop.theta_e_rad,
-                     s_openloop.mech_freq_hz);
+                     vbeta);
 }
 
 static void app_foc_sync_feedback_from_modules(void)
@@ -928,7 +665,11 @@ static void app_foc_medium_reset_command_defaults(void)
   s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
   s_cmd.id_ref_a = FOC_ID_REF_A;
   s_cmd.iq_ref_a = FOC_IQ_REF_A;
-  s_cmd.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
+  {
+    FOC_SpeedLoopSnapshot_t speed_snapshot;
+    FOC_SpeedLoopGetSnapshot(&s_speed_loop, &speed_snapshot);
+    s_cmd.speed_ref_mech_rad_s = speed_snapshot.speed_ref_mech_rad_s;
+  }
   s_cmd.speed_loop_enable = 0u;
 }
 
@@ -1057,10 +798,14 @@ static void app_foc_medium_handle_state_machine(void)
         app_foc_prepare_run_entry();
       }
 
-      app_foc_speed_loop_step(s_medium_task_dt_sec);
-      s_cmd.speed_loop_enable = app_foc_speed_loop_is_enabled();
-      s_cmd.speed_ref_mech_rad_s = s_speed_loop.speed_ref_cmd_mech_rad_s;
-      s_cmd.iq_ref_a = s_speed_loop.iq_ref_cmd_a;
+      {
+        FOC_SpeedLoopSnapshot_t speed_snapshot;
+        FOC_SpeedLoopStep(&s_speed_loop, s_observer.speed_rad_s, s_medium_task_dt_sec);
+        FOC_SpeedLoopGetSnapshot(&s_speed_loop, &speed_snapshot);
+        s_cmd.speed_loop_enable = FOC_SpeedLoopIsEnabled(&s_speed_loop);
+        s_cmd.speed_ref_mech_rad_s = speed_snapshot.speed_ref_mech_rad_s;
+        s_cmd.iq_ref_a = speed_snapshot.iq_ref_cmd_a;
+      }
 
       /* 当前版本仍保留最小回退：若接管状态丢失，则退回 OPENLOOP。 */
       if (s_switchover.state != FOC_SW_STATE_OBSERVER)
@@ -1076,7 +821,7 @@ static void app_foc_medium_handle_state_machine(void)
     case FOC_STATE_FAULT:
       /* 故障阶段：
        * 这里只保持安全命令；
-       * 真正的停机收口由高频里的保护逻辑统一执行。 */
+       * 真正的停机收口由 App 层故障入口统一执行。 */
       s_cmd.theta_mode = APP_FOC_THETA_MODE_OPENLOOP;
       s_cmd.speed_loop_enable = 0u;
       s_cmd.id_ref_a = 0.0f;
@@ -1111,7 +856,7 @@ static void app_foc_run_run(void)
   s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
-    app_foc_stop_to_fault();
+    app_foc_enter_fault();
     return;
   }
 
@@ -1134,14 +879,11 @@ static void app_foc_run_run(void)
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 
-  /* observer 仍在后台更新。
-   * 这里把当前速度环给定换算成机械频率，仅用于观测器内部锁定判定的参考。 */
+  /* observer 仍在后台更新；接管判定统一由 switchover 模块负责。 */
   FOC_ObserverUpdate(&s_observer,
                      &s_sampling,
                      valpha,
-                     vbeta,
-                     theta_ctrl,
-                     cmd.speed_ref_mech_rad_s * 0.15915494309f);
+                     vbeta);
 }
 
 void AppFoc_Init(void)
@@ -1149,7 +891,7 @@ void AppFoc_Init(void)
   /* 初始化所有控制对象，并回到一个安全静止状态。 */
   s_state = FOC_STATE_IDLE;
 #if (APP_DWT_TIMING_ENABLE != 0u)
-  app_foc_dwt_init();
+  AppFocTiming_Init();
 #endif
 
   FOC_SamplingModule_Init(&s_sampling);
@@ -1164,7 +906,7 @@ void AppFoc_Init(void)
   FOC_OpenLoopInit(&s_openloop);
   FOC_ObserverInit(&s_observer);
   FOC_SwitchoverInit(&s_switchover);
-  app_foc_speed_loop_init();
+  FOC_SpeedLoopInit(&s_speed_loop);
   app_foc_medium_reset_command_defaults();
   app_foc_commit_command_active();
   s_feedback.offset_done = 0u;
@@ -1232,7 +974,7 @@ void AppFoc_Start(void)
 #if (APP_DWT_TIMING_ENABLE != 0u)
   AppFoc_ResetHfTimingStats();
 #endif
-  app_foc_speed_loop_reset(0.0f);
+  FOC_SpeedLoopReset(&s_speed_loop, 0.0f);
   app_foc_d_axis_soft_reset();
   s_run_entry_prepared = 0u;
   s_last_medium_tick_ms = HAL_GetTick();
@@ -1244,8 +986,8 @@ void AppFoc_Start(void)
 
 void AppFoc_Stop(void)
 {
-  /* 先走统一停机动作，再停止外设。 */
-  app_foc_stop_to_fault();
+  /* Normal stop: shut outputs down without creating a fault snapshot. */
+  app_foc_shutdown_outputs();
 
   HAL_ADCEx_InjectedStop(&hadc1);
   HAL_ADCEx_InjectedStop_IT(&hadc2);
@@ -1291,7 +1033,7 @@ void AppFoc_MediumFreqTask(void)
 void AppFoc_HighFreqTask(void)
 {
 #if (APP_DWT_TIMING_ENABLE != 0u)
-  const uint32_t hf_start_cycles = app_foc_dwt_get_cycle();
+  const uint32_t hf_start_cycles = AppFocTiming_GetCycle();
 #endif
 
   /*
@@ -1333,7 +1075,7 @@ void AppFoc_HighFreqTask(void)
 
     case FOC_STATE_FAULT:
       app_foc_clear_current_loop_debug();
-      app_foc_stop_to_fault();
+      app_foc_enter_fault();
       break;
 
     case FOC_STATE_IDLE:
@@ -1349,7 +1091,7 @@ void AppFoc_HighFreqTask(void)
 #endif
 
 #if (APP_DWT_TIMING_ENABLE != 0u)
-  app_foc_hf_timing_update(app_foc_dwt_get_cycle() - hf_start_cycles);
+  AppFocTiming_Update(AppFocTiming_GetCycle() - hf_start_cycles);
 #endif
 }
 
@@ -1401,45 +1143,12 @@ uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot)
 
 uint8_t AppFoc_GetHfTimingSnapshot(FOC_HfTimingSnapshot_t *snapshot)
 {
-#if (APP_DWT_TIMING_ENABLE != 0u)
-  uint32_t seq_start;
-  uint32_t seq_end;
-  uint8_t retry = 8u;
-
-  if (snapshot == 0)
-  {
-    return 0u;
-  }
-
-  do
-  {
-    seq_start = s_hf_timing_seq;
-    if ((seq_start & 1u) != 0u)
-    {
-      continue;
-    }
-
-    *snapshot = s_hf_timing_snapshot;
-    seq_end = s_hf_timing_seq;
-
-    if ((seq_start == seq_end) && ((seq_end & 1u) == 0u))
-    {
-      return 1u;
-    }
-  } while (--retry != 0u);
-
-  return 0u;
-#else
-  (void)snapshot;
-  return 0u;
-#endif
+  return AppFocTiming_GetSnapshot(snapshot);
 }
 
 void AppFoc_ResetHfTimingStats(void)
 {
-#if (APP_DWT_TIMING_ENABLE != 0u)
-  app_foc_hf_timing_reset_internal();
-#endif
+  AppFocTiming_Reset();
 }
 
 uint8_t AppFoc_GetFaultSnapshot(FOC_FaultSnapshot_t *snapshot)
@@ -1474,7 +1183,7 @@ void AppFoc_SetSpeedTargetMechHz(float mech_hz)
   /* 只修改最终目标，不直接改 speed_ref_cmd。
    * speed_ref_cmd 在中频速度环里按 FOC_SPEED_REF_RAMP_HZ_PER_S 斜坡追目标，
    * 避免按键/上位机改速时给速度环一个阶跃。 */
-  s_speed_loop.speed_target_mech_rad_s = target_rad_s;
+  FOC_SpeedLoopSetTargetMechRadS(&s_speed_loop, target_rad_s);
 }
 
 uint32_t AppFoc_GetFaultFlags(void)

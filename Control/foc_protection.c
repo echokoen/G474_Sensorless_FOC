@@ -1,11 +1,10 @@
 #include "foc_protection.h"
-#include "bsp_gpio.h"
 #include "foc_config.h"
 #include <math.h>
 
 /* 保护逻辑实现。
  *
- * 负责基础阈值检测，并在故障发生时执行统一停机动作。
+ * 只负责基础阈值检测，停机动作由 App 层统一执行。
  */
 uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
 {
@@ -56,20 +55,4 @@ uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
 #endif
 
   return fault_flags;
-}
-
-void FOC_ProtectionApplyStop(FOC_StateTypeDef *state, FOC_PwmData_t *pwm)
-{
-  /* 故障停机顺序：
-   * 1. 先把 PWM 比较值拉回安全中点；
-   * 2. 再关闭驱动使能；
-   * 3. 最后锁定状态机到 FAULT。
-   */
-  FOC_PwmModule_SetTim1Mid(pwm);
-  HAL_GPIO_WritePin(M1_EN_DRIVER_GPIO_Port, M1_EN_DRIVER_Pin, GPIO_PIN_RESET);
-
-  if (state != 0)
-  {
-    *state = FOC_STATE_FAULT;
-  }
 }

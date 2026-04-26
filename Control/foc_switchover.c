@@ -20,10 +20,14 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
   const float open_speed = FOC_OpenLoopGetElecSpeedRadPerSec(openloop);
   const float obs_speed = FOC_ObserverGetSpeedRadPerSec(observer);
   const float speed_err = fabsf(obs_speed - open_speed);
+  const float angle_err_rad = FOC_MathWrapPi(FOC_OpenLoopGetThetaErad(openloop) -
+                                             FOC_ObserverGetThetaRad(observer));
+  const float angle_err_deg = FOC_MathRadToDeg(angle_err_rad);
   float speed_limit = fabsf(open_speed) * FOC_SWITCHOVER_MAX_SPEED_ERR_RATIO;
 
   if (sw != 0)
   {
+    sw->angle_err_deg = angle_err_deg;
     sw->open_speed_rad_s = open_speed;
     sw->obs_speed_rad_s = obs_speed;
     sw->speed_err_rad_s = speed_err;
@@ -45,7 +49,7 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
     return 0u;
   }
 
-  if (fabsf(FOC_ObserverGetAngleErrDeg(observer)) > FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG)
+  if (fabsf(angle_err_deg) > FOC_SWITCHOVER_MAX_ANGLE_ERR_DEG)
   {
     if (sw != 0) { sw->fail_reason |= 0x02u; }
     return 0u;
@@ -69,6 +73,46 @@ static uint8_t foc_switchover_condition(FOC_SwitchoverData_t *sw,
   return 1u;
 }
 
+static void foc_switchover_update_observer_lock(FOC_SwitchoverData_t *sw,
+                                                const FOC_OpenLoopData_t *openloop,
+                                                const FOC_ObserverData_t *observer)
+{
+  const float angle_err_rad = FOC_MathWrapPi(FOC_OpenLoopGetThetaErad(openloop) -
+                                             FOC_ObserverGetThetaRad(observer));
+  const float angle_err_deg = FOC_MathRadToDeg(angle_err_rad);
+  const uint32_t lock_hold_ticks =
+      (uint32_t)(FOC_OBS_LOCK_HOLD_MS / (FOC_TS_SEC * 1000.0f));
+
+  if (sw == 0)
+  {
+    return;
+  }
+
+  sw->angle_err_deg = angle_err_deg;
+
+  /* Migrated from FOC_ObserverUpdate(): this is the legacy observer locked
+   * condition, kept for debug/compatibility but not used as the final takeover
+   * state. The switchover state machine still owns observer_ready.
+   */
+  if ((FOC_OpenLoopGetFreqHz(openloop) >= FOC_OBS_ENABLE_FREQ_HZ) &&
+      (fabsf(sw->angle_err_deg) < FOC_OBS_LOCK_ERR_DEG))
+  {
+    if (sw->lock_hold_ticks < lock_hold_ticks)
+    {
+      sw->lock_hold_ticks++;
+    }
+    else
+    {
+      sw->locked = 1u;
+    }
+  }
+  else
+  {
+    sw->lock_hold_ticks = 0u;
+    sw->locked = 0u;
+  }
+}
+
 void FOC_SwitchoverInit(FOC_SwitchoverData_t *sw)
 {
   FOC_SwitchoverReset(sw);
@@ -83,9 +127,12 @@ void FOC_SwitchoverReset(FOC_SwitchoverData_t *sw)
 
   sw->observer_ready = 0u;
   sw->ready_now = 0u;
+  sw->locked = 0u;
   sw->hold_ticks = 0u;
+  sw->lock_hold_ticks = 0u;
   sw->blend_ticks = 0u;
   sw->blend_k = 0.0f;
+  sw->angle_err_deg = 0.0f;
   sw->open_speed_rad_s = 0.0f;
   sw->obs_speed_rad_s = 0.0f;
   sw->speed_err_rad_s = 0.0f;
@@ -113,6 +160,7 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
     return;
   }
 
+  foc_switchover_update_observer_lock(sw, openloop, observer);
   ready_now = foc_switchover_condition(sw, openloop, observer);
 
   if (sw->state == FOC_SW_STATE_OPENLOOP)
@@ -157,7 +205,7 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
     if (ready_now == 0u)
     {
       const uint8_t reason = sw->fail_reason;
-      const float angle_err_abs = fabsf(FOC_ObserverGetAngleErrDeg(observer));
+      const float angle_err_abs = fabsf(sw->angle_err_deg);
 
       if (((reason & (uint8_t)~0x02u) == 0u) &&
           (angle_err_abs <= FOC_SWITCHOVER_BLEND_MAX_ANGLE_ERR_DEG))
@@ -187,7 +235,7 @@ void FOC_SwitchoverUpdate(FOC_SwitchoverData_t *sw,
     {
       const uint8_t reset_reason = sw->fail_reason;
       const uint32_t reset_count = sw->blend_reset_count + 1u;
-      const float reset_angle_err_deg = FOC_ObserverGetAngleErrDeg(observer);
+      const float reset_angle_err_deg = sw->angle_err_deg;
       FOC_SwitchoverReset(sw);
       sw->last_blend_reset_reason = reset_reason;
       sw->blend_reset_count = reset_count;
@@ -286,7 +334,7 @@ void FOC_SwitchoverGetDebug(const FOC_SwitchoverData_t *sw,
   if (theta_open) *theta_open = FOC_OpenLoopGetThetaErad(openloop);
   if (theta_obs) *theta_obs = FOC_ObserverGetThetaRad(observer);
   if (theta_ctrl_out) *theta_ctrl_out = theta_ctrl;
-  if (angle_err_deg) *angle_err_deg = FOC_ObserverGetAngleErrDeg(observer);
+  if (angle_err_deg) *angle_err_deg = sw->angle_err_deg;
   if (open_speed_rad_s) *open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(openloop);
   if (obs_speed_rad_s) *obs_speed_rad_s = FOC_ObserverGetSpeedRadPerSec(observer);
 }

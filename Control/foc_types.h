@@ -97,7 +97,7 @@ typedef struct
   float flux_theta_rad;  /* 磁链角。 */
   float theta_rad;       /* 观测器估算角度。 */
   float speed_rad_s;     /* 观测器估算角速度。 */
-  float angle_err_deg;   /* 观测器相位误差，单位 deg。 */
+  float angle_err_deg;   /* 兼容字段：开环角与观测角误差，来自 switchover。 */
   float valpha_v;        /* 输入到观测器的 alpha 轴电压。 */
   float vbeta_v;         /* 输入到观测器的 beta 轴电压。 */
   float ialpha_a;        /* 输入到观测器的 alpha 轴电流。 */
@@ -110,7 +110,7 @@ typedef struct
   float flux_beta;       /* 转子磁链 beta 分量。 */
   float flux_mag;        /* 转子磁链幅值。 */
   float vbus_v;          /* 当前母线电压。 */
-  uint8_t locked;        /* 观测器是否锁定。 */
+  uint8_t locked;        /* 兼容字段：observer 基础锁定状态，来自 switchover。 */
   uint8_t speed_limit_hit;    /* PLL 速度限幅是否接近打满。 */
   uint8_t integral_limit_hit; /* PLL 积分限幅是否接近打满。 */
 } FOC_ObserverSnapshot_t;
@@ -181,7 +181,9 @@ typedef struct
   uint8_t state;            /* 切换状态机当前状态。 */
   uint8_t observer_ready;   /* 观测器是否达到可接管条件。 */
   uint8_t ready_now;        /* 当前这一拍是否满足接管条件。 */
+  uint8_t locked;           /* observer 基础锁定判定结果。 */
   uint32_t hold_ticks;      /* 连续满足接管条件的保持计数。 */
+  uint32_t lock_hold_ticks; /* observer 基础锁定条件保持计数。 */
   uint32_t blend_ticks;     /* 混合接管已持续 tick 数。 */
   float blend_k;            /* 开环角和观测角的混合系数。 */
   float theta_open_rad;     /* 开环角。 */
