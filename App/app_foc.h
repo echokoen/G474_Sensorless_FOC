@@ -42,7 +42,6 @@ void AppFoc_Init(void);
  *
  * 调用后会启动：
  * - TIM1 三相 PWM；
- * - TIM1 基本定时中断；
  * - ADC 常规/注入采样；
  * - 相关内部状态复位。
  *
@@ -80,7 +79,7 @@ void AppFoc_HighFreqTask(void);
  * 职责：
  * - 处理主状态机推进；
  * - 处理启动/停机/故障收口这类慢流程；
- * - 预留速度环与给定更新框架；
+ * - 执行速度目标斜坡和速度环给定更新；
  * - 高频只负责执行本拍控制。
  */
 void AppFoc_MediumFreqTask(void);
@@ -103,6 +102,9 @@ uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
  * 一次性打包出来，供低频打印或上位机读取。
  */
 uint8_t AppFoc_GetRuntimeSnapshot(FOC_RuntimeSnapshot_t *snapshot);
+
+uint8_t AppFoc_GetFaultSnapshot(FOC_FaultSnapshot_t *snapshot);
+void AppFoc_ClearFaultSnapshot(void);
 
 /* 设置 RUN 阶段的机械速度目标，单位 Hz。
  *

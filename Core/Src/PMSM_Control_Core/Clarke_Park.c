@@ -1,5 +1,5 @@
 #include "PMSM_Control_Core/Clarke_Park.h"
-#include <math.h>
+#include "foc_math.h"
 
 /* 坐标变换实现。
  *
@@ -37,8 +37,7 @@ void ClarkePark_Park(const ClarkePark_AlphaBeta_t *in, float theta_rad, ClarkePa
     return;
   }
 
-  sin_t = sinf(theta_rad);
-  cos_t = cosf(theta_rad);
+  FOC_Math_SinCos(theta_rad, &sin_t, &cos_t);
 
   /* Park 变换：
    * d =  alpha * cos(theta) + beta * sin(theta)
@@ -61,8 +60,7 @@ void ClarkePark_InvPark(const ClarkePark_DQ_t *in, float theta_rad, ClarkePark_A
     return;
   }
 
-  sin_t = sinf(theta_rad);
-  cos_t = cosf(theta_rad);
+  FOC_Math_SinCos(theta_rad, &sin_t, &cos_t);
 
   /* 反 Park 变换：
    * alpha = d * cos(theta) - q * sin(theta)

@@ -50,11 +50,9 @@ objects\app_foc.o: ../Drivers/BSP/bsp_tim.h
 objects\app_foc.o: ..\Control\foc_current_loop.h
 objects\app_foc.o: ../Core/Inc/PMSM_Control_Core/Clarke_Park.h
 objects\app_foc.o: ..\Control\foc_sampling.h
-objects\app_foc.o: ..\Control\foc_deadtime.h
-objects\app_foc.o: ..\Control\foc_debug.h
-objects\app_foc.o: ..\Control\foc_pwm.h
 objects\app_foc.o: ..\Control\foc_observer.h
 objects\app_foc.o: ..\Control\foc_openloop.h
 objects\app_foc.o: ..\Control\foc_protection.h
+objects\app_foc.o: ..\Control\foc_pwm.h
 objects\app_foc.o: ..\Control\foc_switchover.h
 objects\app_foc.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

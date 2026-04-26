@@ -8,6 +8,7 @@
 "objects\pi_controller.o"
 "objects\app_foc.o"
 "objects\app_debug.o"
+"objects\foc_math.o"
 "objects\foc_sampling.o"
 "objects\foc_pwm.o"
 "objects\foc_current_loop.o"

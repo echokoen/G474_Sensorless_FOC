@@ -16,7 +16,8 @@ extern "C" {
  *
  * 可组合：
  * - 欠压 / 过压；
- * - 三相任一相过流。
+ * - 三相任一相过流；
+ * - 采样 hold-last 超限。
  */
 typedef enum
 {
@@ -25,7 +26,8 @@ typedef enum
   FOC_FAULT_VBUS_OVER    = (1u << 1),
   FOC_FAULT_OC_U         = (1u << 2),
   FOC_FAULT_OC_V         = (1u << 3),
-  FOC_FAULT_OC_W         = (1u << 4)
+  FOC_FAULT_OC_W         = (1u << 4),
+  FOC_FAULT_SAMPLE_HOLD  = (1u << 5)
 } FOC_FaultFlags_t;
 
 uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling);

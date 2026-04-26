@@ -490,6 +490,11 @@
               <FilePath>..\Control\foc_math.h</FilePath>
             </File>
             <File>
+              <FileName>foc_math.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Control\foc_math.c</FilePath>
+            </File>
+            <File>
               <FileName>foc_sampling.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Control\foc_sampling.h</FilePath>

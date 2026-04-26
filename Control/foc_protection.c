@@ -48,6 +48,13 @@ uint32_t FOC_ProtectionCheckFault(const FOC_SamplingData_t *sampling)
     fault_flags |= FOC_FAULT_OC_W;
   }
 
+#if (FOC_ADC_FALLBACK_HOLD_FAULT_ENABLE != 0u)
+  if (sampling->fallback_hold_count > FOC_ADC_FALLBACK_HOLD_MAX_TICKS)
+  {
+    fault_flags |= FOC_FAULT_SAMPLE_HOLD;
+  }
+#endif
+
   return fault_flags;
 }
 

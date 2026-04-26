@@ -40,7 +40,7 @@ objects\main.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\main.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 objects\main.o: ../Drivers/BSP/bsp_adc.h
 objects\main.o: ../Drivers/BSP/bsp_cordic.h
-objects\main.o: ../Drivers/BSP/bsp_dac.h
+objects\main.o: ../Core/Inc/foc_config.h
 objects\main.o: ../Drivers/BSP/bsp_dma.h
 objects\main.o: ../Drivers/BSP/bsp_key.h
 objects\main.o: ../Drivers/BSP/bsp_tim.h

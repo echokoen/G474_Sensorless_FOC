@@ -134,6 +134,9 @@ typedef struct
   uint16_t adc2_j2_raw;  /* ADC2 注入通道 2 原始值。 */
   uint16_t adc2_j3_raw;  /* ADC2 注入通道 3 原始值。 */
   uint8_t trusted_pair;  /* 当前可信两相组合。 */
+  uint8_t fallback_request;      /* 1=本拍 PWM 采样窗口不足，请求 fallback。 */
+  uint8_t used_hold_last_current;/* 1=本拍实际沿用上一拍有效电流。 */
+  uint16_t fallback_hold_count;  /* 连续 hold-last 计数，排查低占空比采样窗口问题。 */
 } FOC_SamplingSnapshot_t;
 
 /* 电流环快照。 */
@@ -196,6 +199,7 @@ typedef struct
 typedef struct
 {
   FOC_StateTypeDef state;                    /* 当前 FOC 主状态。 */
+  uint32_t fault_flags;                      /* 当前故障位图。 */
   uint8_t svpwm_sector;                      /* 当前 PWM 扇区。 */
   FOC_OpenLoopSnapshot_t openloop;          /* 开环状态。 */
   FOC_ObserverSnapshot_t observer;          /* 观测器状态。 */
@@ -204,6 +208,39 @@ typedef struct
   FOC_SpeedLoopSnapshot_t speed_loop;       /* 速度环状态。 */
   FOC_SwitchoverSnapshot_t switchover;      /* 切换状态。 */
 } FOC_RuntimeSnapshot_t;
+
+typedef struct
+{
+  uint8_t valid;
+  FOC_StateTypeDef state;
+  uint32_t fault_flags;
+
+  float id_ref_a;
+  float iq_ref_a;
+  float id_meas_a;
+  float iq_meas_a;
+
+  float vd_v;
+  float vq_v;
+  float valpha_v;
+  float vbeta_v;
+
+  float theta_ctrl_rad;
+  float theta_open_rad;
+  float theta_obs_rad;
+
+  float open_speed_rad_s;
+  float obs_speed_rad_s;
+  float speed_ref_mech_rad_s;
+  float speed_fdb_mech_rad_s;
+
+  float vbus_v;
+
+  uint8_t svpwm_sector;
+  uint8_t fallback_request;
+  uint8_t used_hold_last_current;
+  uint16_t fallback_hold_count;
+} FOC_FaultSnapshot_t;
 
 /* 兼容旧命名。 */
 typedef FOC_StateTypeDef FocState_t;

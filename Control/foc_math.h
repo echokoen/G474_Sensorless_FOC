@@ -4,10 +4,9 @@
 extern "C" {
 #endif
 
-/* 轻量数学工具。
- *
- * 这里只保留非常小的内联函数，供 FOC 各模块共享。
- */
+/* Small shared math helpers for FOC modules. */
+
+void FOC_Math_SinCos(float theta_rad, float *sin_out, float *cos_out);
 
 static inline float FOC_MathClampF(float x, float min_v, float max_v)
 {
