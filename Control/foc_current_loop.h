@@ -6,6 +6,7 @@ extern "C" {
 #include "PMSM_Control_Core/PI_Controller.h"
 #include "PMSM_Control_Core/Clarke_Park.h"
 #include "foc_sampling.h"
+#include <stdint.h>
 
 /* dq 电流环模块接口。
  *
@@ -30,8 +31,17 @@ typedef struct
   float iq_ref_a;
   float id_meas_a;
   float iq_meas_a;
-  /* PI 和限幅后的 dq 电压命令。 */
+  /* PI、前馈和限幅后的 dq 电压命令。 */
   float vd_pi_v;
+  float vq_pi_v;
+  float vd_ff_v;
+  float vq_ff_v;
+  float vd_ff_raw_v;
+  float vq_ff_raw_v;
+  float bemf_ff_blend;
+  float decouple_ff_blend;
+  uint32_t decouple_ff_delay_ticks;
+  uint8_t ff_enable;
   float vd_cmd_v;
   float vq_cmd_v;
   /* 反 Park 后送给 SVPWM 的 alpha/beta 电压命令。 */
@@ -79,6 +89,18 @@ void FOC_CurrentLoopRunDSoft(FOC_CurrentLoopData_t *loop,
                              float vd_cmd_limit_v,
                              float *valpha,
                              float *vbeta);
+
+void FOC_CurrentLoopRunDSoftFeedForward(FOC_CurrentLoopData_t *loop,
+                                        const FOC_SamplingData_t *sampling,
+                                        float theta_rad,
+                                        float id_ref_a,
+                                        float iq_ref_a,
+                                        float d_axis_enable_k,
+                                        float vd_cmd_limit_v,
+                                        float we_rad_s,
+                                        float vbus_v,
+                                        float *valpha,
+                                        float *vbeta);
 
 void FOC_CurrentLoopRunOpenLoopVoltTest(FOC_CurrentLoopData_t *loop,
                                         const FOC_SamplingData_t *sampling,

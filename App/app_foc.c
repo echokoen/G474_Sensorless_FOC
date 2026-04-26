@@ -590,6 +590,16 @@ static void app_foc_clear_current_loop_debug(void)
   s_current_loop.iq_ref_a = 0.0f;
   s_current_loop.id_meas_a = 0.0f;
   s_current_loop.iq_meas_a = 0.0f;
+  s_current_loop.vd_pi_v = 0.0f;
+  s_current_loop.vq_pi_v = 0.0f;
+  s_current_loop.vd_ff_v = 0.0f;
+  s_current_loop.vq_ff_v = 0.0f;
+  s_current_loop.vd_ff_raw_v = 0.0f;
+  s_current_loop.vq_ff_raw_v = 0.0f;
+  s_current_loop.bemf_ff_blend = 0.0f;
+  s_current_loop.decouple_ff_blend = 0.0f;
+  s_current_loop.decouple_ff_delay_ticks = 0u;
+  s_current_loop.ff_enable = 0u;
   s_current_loop.vd_cmd_v = 0.0f;
   s_current_loop.vq_cmd_v = 0.0f;
   s_current_loop.valpha_cmd_v = 0.0f;
@@ -727,6 +737,14 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   snapshot->current_loop.id_meas_a = s_current_loop.id_meas_a;
   snapshot->current_loop.iq_meas_a = s_current_loop.iq_meas_a;
   snapshot->current_loop.vd_pi_v = s_current_loop.vd_pi_v;
+  snapshot->current_loop.vq_pi_v = s_current_loop.vq_pi_v;
+  snapshot->current_loop.vd_ff_v = s_current_loop.vd_ff_v;
+  snapshot->current_loop.vq_ff_v = s_current_loop.vq_ff_v;
+  snapshot->current_loop.vd_ff_raw_v = s_current_loop.vd_ff_raw_v;
+  snapshot->current_loop.vq_ff_raw_v = s_current_loop.vq_ff_raw_v;
+  snapshot->current_loop.bemf_ff_blend = s_current_loop.bemf_ff_blend;
+  snapshot->current_loop.decouple_ff_blend = s_current_loop.decouple_ff_blend;
+  snapshot->current_loop.ff_enable = s_current_loop.ff_enable;
   snapshot->current_loop.vd_cmd_v = s_current_loop.vd_cmd_v;
   snapshot->current_loop.vq_cmd_v = s_current_loop.vq_cmd_v;
   snapshot->current_loop.valpha_cmd_v = s_current_loop.valpha_cmd_v;
@@ -1102,15 +1120,17 @@ static void app_foc_run_run(void)
   theta_ctrl = FOC_ObserverGetThetaRad(&s_observer);
 
   app_foc_d_axis_soft_update();
-  FOC_CurrentLoopRunDSoft(&s_current_loop,
-                          &s_sampling,
-                          theta_ctrl,
-                          cmd.id_ref_a,
-                          cmd.iq_ref_a,
-                          s_d_axis_enable_k,
-                          s_d_axis_vd_limit_v,
-                          &valpha,
-                          &vbeta);
+  FOC_CurrentLoopRunDSoftFeedForward(&s_current_loop,
+                                     &s_sampling,
+                                     theta_ctrl,
+                                     cmd.id_ref_a,
+                                     cmd.iq_ref_a,
+                                     s_d_axis_enable_k,
+                                     s_d_axis_vd_limit_v,
+                                     FOC_ObserverGetSpeedRadPerSec(&s_observer),
+                                     s_sampling.vbus_v,
+                                     &valpha,
+                                     &vbeta);
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 

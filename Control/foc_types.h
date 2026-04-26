@@ -147,6 +147,14 @@ typedef struct
   float id_meas_a;        /* d 轴电流反馈值。 */
   float iq_meas_a;        /* q 轴电流反馈值。 */
   float vd_pi_v;          /* d 轴 PI 原始输出，软接管时用于观察突变风险。 */
+  float vq_pi_v;          /* q 轴 PI 原始输出，观察前馈加入后 PI 压力是否下降。 */
+  float vd_ff_v;          /* d 轴最终前馈电压，已经过斜坡和单独限幅。 */
+  float vq_ff_v;          /* q 轴最终前馈电压，已经过斜坡和单独限幅。 */
+  float vd_ff_raw_v;      /* d 轴理论前馈电压，未乘目标系数和斜坡。 */
+  float vq_ff_raw_v;      /* q 轴理论前馈电压，未乘目标系数和斜坡。 */
+  float bemf_ff_blend;    /* 反电动势前馈斜坡系数，0~1。 */
+  float decouple_ff_blend;/* 交叉耦合前馈斜坡系数，0~1。 */
+  uint8_t ff_enable;      /* 1=本拍 RUN 前馈条件满足。 */
   float vd_cmd_v;         /* d 轴电压指令。 */
   float vq_cmd_v;         /* q 轴电压指令。 */
   float valpha_cmd_v;     /* alpha 轴电压指令。 */

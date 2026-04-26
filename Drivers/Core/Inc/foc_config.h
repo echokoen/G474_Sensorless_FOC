@@ -93,6 +93,43 @@ extern "C" {
 #define FOC_DQ_TEST_VD_V             (1.5f)      /* dq 电压注入测试的 d 轴电压，当前验证 d 轴极性。 */
 #define FOC_DQ_TEST_VQ_V             (0.0f)      /* dq 电压注入测试的 q 轴电压。 */
 
+/* ==================== 前馈补偿参数（独立配置块） ==================== */
+/* 作用位置：d/q 电流 PI 输出之后，dq 电压矢量限幅之前。
+ * 启用策略：首版只在 RUN 阶段生效，ALIGN/OPENLOOP/FAULT 阶段清零。
+ * 调试策略：先开反电动势前馈，交叉耦合补偿默认目标系数为 0。
+ */
+
+/* 1. 总开关 */
+#define FOC_FF_ENABLE                (1u)        /* 1=允许 RUN 阶段前馈补偿，0=完全关闭。 */
+#define FOC_BEMF_FF_ENABLE           (1u)        /* 1=启用 q 轴反电动势前馈。 */
+#define FOC_DECOUPLE_FF_ENABLE       (1u)        /* 1=允许交叉耦合补偿；实际大小还受 FOC_DECOUPLE_FF_GAIN_TARGET 控制。 */
+
+/* 2. 模型参数 */
+#define FOC_LD_H                     (FOC_LS_H)  /* d 轴电感，表贴式 PMSM 初版按 Ld=Lq=Ls。 */
+#define FOC_LQ_H                     (FOC_LS_H)  /* q 轴电感，表贴式 PMSM 初版按 Ld=Lq=Ls。 */
+
+/* 3. 补偿目标系数：理论满补为 1.0，调试初期必须保守。 */
+#define FOC_BEMF_FF_GAIN_TARGET      (0.10f)     /* 反电动势前馈目标系数。首版先补 10%，确认方向后再逐步加。 */
+#define FOC_DECOUPLE_FF_GAIN_TARGET  (0.00f)     /* 交叉耦合补偿目标系数。首版默认 0，稳定后可从 0.05/0.10 开始。 */
+
+/* 4. 启用门槛 */
+#define FOC_FF_MIN_ELEC_SPEED_RAD_S  (100.0f)    /* 低于该电角速度时不补，避免低速估速噪声进入电压命令。 */
+#define FOC_FF_SPEED_LIMIT_RAD_S     (FOC_OBS_SPEED_LIMIT_RAD_S) /* 前馈计算使用的电角速度限幅。 */
+#define FOC_FF_MIN_VBUS_V            (10.0f)     /* 母线过低时不做前馈，避免电压指令异常。 */
+
+/* 5. 斜坡与延迟 */
+#define FOC_BEMF_FF_RAMP_MS          (300.0f)    /* 反电动势补偿从 0 爬升到目标值的时间。 */
+#define FOC_DECOUPLE_FF_DELAY_MS     (300.0f)    /* RUN 后延迟多久再允许交叉耦合补偿爬升。 */
+#define FOC_DECOUPLE_FF_RAMP_MS      (500.0f)    /* 交叉耦合补偿从 0 爬升到目标值的时间。 */
+
+/* 6. 前馈单独限幅：最终 vd/vq 仍会再经过 FOC_DQ_VOLT_LIMIT 总限幅。 */
+#define FOC_FF_VD_LIMIT_RATIO        (0.40f)     /* vd_ff 单独限幅，占可用 dq 电压的比例。 */
+#define FOC_FF_VQ_LIMIT_RATIO        (0.70f)     /* vq_ff 单独限幅，占可用 dq 电压的比例。 */
+
+/* 7. 方向修正：若补偿后现象变差，优先检查这里。 */
+#define FOC_BEMF_FF_SIGN             (1.0f)      /* 反电动势补偿方向修正。若补偿后更差，优先改为 -1。 */
+#define FOC_DECOUPLE_FF_SIGN         (1.0f)      /* 交叉耦合补偿方向修正。若开解耦后 id/iq 更差，优先改为 -1。 */
+
 /* ==================== 启动 / 对齐 / 开环参数 ==================== */
 /* 启动流程相关参数。
  * OFFSET_CALIB 完成后进入 ALIGN，对齐结束后进入 OPENLOOP，
