@@ -39,5 +39,5 @@ objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex
 objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 objects\stm32g4xx_it.o: ../Core/Inc/stm32g4xx_it.h
-objects\stm32g4xx_it.o: ..\App\app_foc.h
-objects\stm32g4xx_it.o: ..\Control\foc_types.h
+objects\stm32g4xx_it.o: ../App/app_foc.h
+objects\stm32g4xx_it.o: ../Control/Common/foc_types.h

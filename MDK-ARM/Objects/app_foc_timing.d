@@ -1,8 +1,8 @@
-objects\app_foc_timing.o: ..\App\app_foc_timing.c
-objects\app_foc_timing.o: ..\App\app_foc_timing.h
-objects\app_foc_timing.o: ..\Control\foc_types.h
+objects\app_foc_timing.o: ../App/app_foc_timing.c
+objects\app_foc_timing.o: ../App/app_foc_timing.h
+objects\app_foc_timing.o: ../Control/Common/foc_types.h
 objects\app_foc_timing.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-objects\app_foc_timing.o: ../Core/Inc/foc_config.h
+objects\app_foc_timing.o: ../Config/foc_config.h
 objects\app_foc_timing.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h
 objects\app_foc_timing.o: ../Core/Inc/stm32g4xx_hal_conf.h
 objects\app_foc_timing.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_rcc.h

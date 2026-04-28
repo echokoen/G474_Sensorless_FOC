@@ -93,7 +93,7 @@ FOC_StateTypeDef AppFoc_GetState(void);
  * - 1：获取成功；
  * - 0：参数为空或未获取到有效数据。
  */
-uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot);
+uint8_t AppFoc_GetTraceSnapshot(FOC_TraceSnapshot_t *snapshot);
 
 /* 获取应用层运行快照。
  *

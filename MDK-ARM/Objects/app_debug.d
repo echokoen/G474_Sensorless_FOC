@@ -1,9 +1,9 @@
-objects\app_debug.o: ..\App\app_debug.c
-objects\app_debug.o: ..\App\app_debug.h
-objects\app_debug.o: ..\App\app_foc.h
-objects\app_debug.o: ..\Control\foc_types.h
+objects\app_debug.o: ../App/app_debug.c
+objects\app_debug.o: ../App/app_debug.h
+objects\app_debug.o: ../App/app_foc.h
+objects\app_debug.o: ../Control/Common/foc_types.h
 objects\app_debug.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-objects\app_debug.o: ../Core/Inc/foc_config.h
+objects\app_debug.o: ../Config/foc_config.h
 objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h
 objects\app_debug.o: ../Core/Inc/stm32g4xx_hal_conf.h
 objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_rcc.h

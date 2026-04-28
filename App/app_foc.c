@@ -12,7 +12,7 @@
  *   应用层只负责调度它们。
  */
 
-#include "PMSM_Control_Core/FluxObserver_PLL.h"
+#include "foc_flux_observer_pll.h"
 #include "bsp_key.h"
 #include "bsp_adc.h"
 #include "bsp_gpio.h"
@@ -21,20 +21,20 @@
 #include "foc_config.h"
 #if ((FOC_DT_COMP_ENABLE != 0u) && ((FOC_DT_COMP_ENABLE_ALIGN != 0u) || (FOC_DT_COMP_ENABLE_OPENLOOP != 0u) || (FOC_DT_COMP_ENABLE_RUN != 0u)))
 #define APP_FOC_DEADTIME_ACTIVE (1u)
-#include "foc_deadtime.h"
+#include "foc_deadtime_comp.h"
 #else
 #define APP_FOC_DEADTIME_ACTIVE (0u)
 #endif
 #if (FOC_HF_DEBUG_SNAPSHOT_ENABLE != 0u)
-#include "foc_debug.h"
+#include "foc_trace.h"
 #endif
 #include "foc_observer.h"
-#include "foc_openloop.h"
+#include "foc_startup.h"
 #include "foc_protection.h"
-#include "foc_pwm.h"
-#include "foc_sampling.h"
+#include "foc_svpwm.h"
+#include "foc_current_sense.h"
 #include "foc_speed_loop.h"
-#include "foc_switchover.h"
+#include "foc_handover.h"
 #include "stm32g4xx_hal.h"
 
 extern TIM_HandleTypeDef htim1;
@@ -49,18 +49,18 @@ extern ADC_HandleTypeDef hadc2;
  * 这样可以减少模块间的耦合。
  */
 static volatile FOC_StateTypeDef s_state = FOC_STATE_IDLE;
-static FOC_SamplingData_t s_sampling = {0};
-static FOC_PwmData_t s_pwm = {0};
+static FOC_CurrentSense_t s_current_sense = {0};
+static FOC_Svpwm_t s_svpwm = {0};
 #if (APP_FOC_DEADTIME_ACTIVE != 0u)
 static FOC_DeadtimeComp_t s_deadtime = {0};
 #endif
 #if (FOC_HF_DEBUG_SNAPSHOT_ENABLE != 0u)
-static FOC_DebugData_t s_debug = {0};
+static FOC_Trace_t s_trace = {0};
 #endif
 static FOC_CurrentLoopData_t s_current_loop = {0};
-static FOC_OpenLoopData_t s_openloop = {0};
+static FOC_Startup_t s_startup = {0};
 static FOC_ObserverData_t s_observer = {0};
-static FOC_SwitchoverData_t s_switchover = {0};
+static FOC_Handover_t s_handover = {0};
 static FOC_SpeedLoopData_t s_speed_loop = {0};
 static uint32_t s_fault_flags = FOC_FAULT_NONE;
 
@@ -93,7 +93,7 @@ typedef struct
 typedef struct
 {
   uint8_t offset_done;       /* 零点校准是否完成。 */
-  uint8_t observer_ready;    /* switchover 是否认为 observer 可接管。 */
+  uint8_t observer_ready;    /* handover 是否认为 observer 可接管。 */
   uint32_t align_ticks;      /* 对齐阶段已累计的高频 tick。 */
   float mech_freq_hz;        /* 当前开环机械频率。 */
   uint32_t fault_flags;      /* 最近一次故障位图。 */
@@ -169,7 +169,7 @@ static void app_foc_prepare_run_entry(void)
 
   FOC_SpeedLoopPrepareRunEntry(&s_speed_loop,
                                s_observer.speed_rad_s,
-                               FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop));
+                               FOC_Startup_GetElecSpeedRadPerSec(&s_startup));
 
   /* RUN 入口不再清电流环 PI。
    * Id/Iq 双环已经在 OPENLOOP 阶段逐步接管，RUN 只切换角度来源和速度环给定。 */
@@ -222,15 +222,15 @@ static void app_foc_drive_enable(uint8_t enable)
  * 这里先把当前 SVPWM 扇区传给采样模块，
  * 再由采样模块决定两相可信关系和电流重构方式。
  */
-static void app_foc_sampling_update(void)
+static void app_foc_current_sense_update(void)
 {
   uint8_t fb_req = 0u;
 
   /*
-   * s_pwm.svpwm_sector 表示当前 ADC 数据应使用的解码扇区。
+   * s_svpwm.svpwm_sector 表示当前 ADC 数据应使用的解码扇区。
    * 采样模块只根据这个扇区选择可信两相和重构第三相。
    */
-  FOC_SamplingModule_SetSampleSector(&s_sampling, s_pwm.svpwm_sector);
+  FOC_CurrentSense_SetSampleSector(&s_current_sense, s_svpwm.svpwm_sector);
 
   /*
    * hold-last fallback 只在 OPENLOOP/RUN 中启用。
@@ -238,11 +238,11 @@ static void app_foc_sampling_update(void)
    */
   if ((s_state == FOC_STATE_OPENLOOP) || (s_state == FOC_STATE_RUN))
   {
-    fb_req = s_pwm.adc_trigger_fallback;
+    fb_req = s_svpwm.adc_trigger_fallback;
   }
 
-  FOC_SamplingModule_SetFallbackRequest(&s_sampling, fb_req);
-  FOC_SamplingModule_Update(&s_sampling);
+  FOC_CurrentSense_SetFallbackRequest(&s_current_sense, fb_req);
+  FOC_CurrentSense_Update(&s_current_sense);
 }
 
 /*
@@ -256,12 +256,12 @@ static void app_foc_sampling_update(void)
  */
 static void app_foc_force_mid_output(void)
 {
-  FOC_PwmModule_SetTim1Mid(&s_pwm);
+  FOC_Svpwm_SetTim1Mid(&s_svpwm);
 }
 
 static void app_foc_shutdown_outputs(void)
 {
-  FOC_PwmModule_SetTim1Mid(&s_pwm);
+  FOC_Svpwm_SetTim1Mid(&s_svpwm);
   app_foc_drive_enable(0u);
 }
 
@@ -288,10 +288,10 @@ static void app_foc_apply_voltage_command(float *valpha, float *vbeta, uint8_t d
   if (dt_enable != 0u)
   {
     FOC_DeadtimeComp_Apply(&s_deadtime,
-                           s_sampling.vbus_v,
-                           s_sampling.iu_a,
-                           s_sampling.iv_a,
-                           s_sampling.iw_a,
+                           s_current_sense.vbus_v,
+                           s_current_sense.iu_a,
+                           s_current_sense.iv_a,
+                           s_current_sense.iw_a,
                            valpha_cmd,
                            vbeta_cmd,
                            &valpha_cmd,
@@ -306,7 +306,7 @@ static void app_foc_apply_voltage_command(float *valpha, float *vbeta, uint8_t d
   s_last_dt_enable = 0u;
 #endif
 
-  FOC_PwmModule_ApplySvpwm(&s_pwm, valpha_cmd, vbeta_cmd, s_sampling.vbus_v);
+  FOC_Svpwm_ApplySvpwm(&s_svpwm, valpha_cmd, vbeta_cmd, s_current_sense.vbus_v);
   *valpha = valpha_cmd;
   *vbeta = vbeta_cmd;
 }
@@ -364,10 +364,10 @@ static void app_foc_latch_fault_snapshot(void)
   s_fault_snapshot.vbeta_v = s_current_loop.vbeta_cmd_v;
 
   s_fault_snapshot.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
-  s_fault_snapshot.theta_open_rad = s_openloop.theta_e_rad;
+  s_fault_snapshot.theta_open_rad = s_startup.theta_e_rad;
   s_fault_snapshot.theta_obs_rad = s_observer.theta_rad;
 
-  s_fault_snapshot.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
+  s_fault_snapshot.open_speed_rad_s = FOC_Startup_GetElecSpeedRadPerSec(&s_startup);
   s_fault_snapshot.obs_speed_rad_s = s_observer.speed_rad_s;
   {
     FOC_SpeedLoopSnapshot_t speed_snapshot;
@@ -376,12 +376,12 @@ static void app_foc_latch_fault_snapshot(void)
     s_fault_snapshot.speed_fdb_mech_rad_s = speed_snapshot.speed_fdb_mech_rad_s;
   }
 
-  s_fault_snapshot.vbus_v = s_sampling.vbus_v;
+  s_fault_snapshot.vbus_v = s_current_sense.vbus_v;
 
-  s_fault_snapshot.svpwm_sector = s_pwm.svpwm_sector;
-  s_fault_snapshot.fallback_request = s_sampling.fallback_request;
-  s_fault_snapshot.used_hold_last_current = s_sampling.used_hold_last_current;
-  s_fault_snapshot.fallback_hold_count = s_sampling.fallback_hold_count;
+  s_fault_snapshot.svpwm_sector = s_svpwm.svpwm_sector;
+  s_fault_snapshot.fallback_request = s_current_sense.fallback_request;
+  s_fault_snapshot.used_hold_last_current = s_current_sense.used_hold_last_current;
+  s_fault_snapshot.fallback_hold_count = s_current_sense.fallback_hold_count;
 }
 
 /*
@@ -423,19 +423,19 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   /* PWM / 扇区信息。 */
   snapshot->state = s_state;
   snapshot->fault_flags = s_fault_flags;
-  snapshot->svpwm_sector = s_pwm.svpwm_sector;
+  snapshot->svpwm_sector = s_svpwm.svpwm_sector;
 
   /* 开环信息。 */
-  snapshot->openloop.freq_hz = s_openloop.mech_freq_hz;
-  snapshot->openloop.theta_e_rad = s_openloop.theta_e_rad;
+  snapshot->startup.freq_hz = s_startup.mech_freq_hz;
+  snapshot->startup.theta_e_rad = s_startup.theta_e_rad;
 
   /* 观测器信息。 */
   snapshot->observer.flux_theta_rad = FOC_ObserverGetFluxThetaRad(&s_observer);
   snapshot->observer.theta_rad = s_observer.theta_rad;
   snapshot->observer.speed_rad_s = s_observer.speed_rad_s;
-  snapshot->observer.angle_err_deg = s_switchover.angle_err_deg;
-  snapshot->observer.vbus_v = s_sampling.vbus_v;
-  snapshot->observer.locked = s_switchover.locked;
+  snapshot->observer.angle_err_deg = s_handover.angle_err_deg;
+  snapshot->observer.vbus_v = s_current_sense.vbus_v;
+  snapshot->observer.locked = s_handover.locked;
   snapshot->observer.pll_err = s_observer.flux_obs.pll_err;
   snapshot->observer.pll_integral = s_observer.flux_obs.pll_integral;
   snapshot->observer.pll_speed_raw_rad_s = s_observer.flux_obs.pll_speed_raw_rad_s;
@@ -452,25 +452,25 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
                         &snapshot->observer.ibeta_a);
 
   /* 采样信息。 */
-  snapshot->sampling.vbus_v = s_sampling.vbus_v;
-  snapshot->sampling.iu_a = s_sampling.iu_a;
-  snapshot->sampling.iv_a = s_sampling.iv_a;
-  snapshot->sampling.iw_a = s_sampling.iw_a;
-  snapshot->sampling.iu_offset_v = s_sampling.iu_offset_v;
-  snapshot->sampling.iv_offset_v = s_sampling.iv_offset_v;
-  snapshot->sampling.iw_offset_v = s_sampling.iw_offset_v;
-  snapshot->sampling.raw_u = s_sampling.raw_u;
-  snapshot->sampling.raw_v = s_sampling.raw_v;
-  snapshot->sampling.raw_w = s_sampling.raw_w;
-  snapshot->sampling.adc1_j1_raw = s_sampling.adc1_j1_raw;
-  snapshot->sampling.adc1_j2_raw = s_sampling.adc1_j2_raw;
-  snapshot->sampling.adc2_j1_raw = s_sampling.adc2_j1_raw;
-  snapshot->sampling.adc2_j2_raw = s_sampling.adc2_j2_raw;
-  snapshot->sampling.adc2_j3_raw = s_sampling.adc2_j3_raw;
-  snapshot->sampling.trusted_pair = s_sampling.trusted_current_pair;
-  snapshot->sampling.fallback_request = s_sampling.fallback_request;
-  snapshot->sampling.used_hold_last_current = s_sampling.used_hold_last_current;
-  snapshot->sampling.fallback_hold_count = s_sampling.fallback_hold_count;
+  snapshot->current_sense.vbus_v = s_current_sense.vbus_v;
+  snapshot->current_sense.iu_a = s_current_sense.iu_a;
+  snapshot->current_sense.iv_a = s_current_sense.iv_a;
+  snapshot->current_sense.iw_a = s_current_sense.iw_a;
+  snapshot->current_sense.iu_offset_v = s_current_sense.iu_offset_v;
+  snapshot->current_sense.iv_offset_v = s_current_sense.iv_offset_v;
+  snapshot->current_sense.iw_offset_v = s_current_sense.iw_offset_v;
+  snapshot->current_sense.raw_u = s_current_sense.raw_u;
+  snapshot->current_sense.raw_v = s_current_sense.raw_v;
+  snapshot->current_sense.raw_w = s_current_sense.raw_w;
+  snapshot->current_sense.adc1_j1_raw = s_current_sense.adc1_j1_raw;
+  snapshot->current_sense.adc1_j2_raw = s_current_sense.adc1_j2_raw;
+  snapshot->current_sense.adc2_j1_raw = s_current_sense.adc2_j1_raw;
+  snapshot->current_sense.adc2_j2_raw = s_current_sense.adc2_j2_raw;
+  snapshot->current_sense.adc2_j3_raw = s_current_sense.adc2_j3_raw;
+  snapshot->current_sense.trusted_pair = s_current_sense.trusted_current_pair;
+  snapshot->current_sense.fallback_request = s_current_sense.fallback_request;
+  snapshot->current_sense.used_hold_last_current = s_current_sense.used_hold_last_current;
+  snapshot->current_sense.fallback_hold_count = s_current_sense.fallback_hold_count;
 
   /* 电流环信息。 */
   snapshot->current_loop.id_ref_a = s_current_loop.id_ref_a;
@@ -499,25 +499,25 @@ static void app_foc_fill_runtime_snapshot(FOC_RuntimeSnapshot_t *snapshot)
   FOC_SpeedLoopGetSnapshot(&s_speed_loop, &snapshot->speed_loop);
 
   /* 开环到观测器切换信息。 */
-  snapshot->switchover.state = (uint8_t)s_switchover.state;
-  snapshot->switchover.observer_ready = s_switchover.observer_ready;
-  snapshot->switchover.ready_now = s_switchover.ready_now;
-  snapshot->switchover.locked = s_switchover.locked;
-  snapshot->switchover.hold_ticks = s_switchover.hold_ticks;
-  snapshot->switchover.lock_hold_ticks = s_switchover.lock_hold_ticks;
-  snapshot->switchover.blend_ticks = s_switchover.blend_ticks;
-  snapshot->switchover.blend_k = s_switchover.blend_k;
-  snapshot->switchover.theta_open_rad = s_openloop.theta_e_rad;
-  snapshot->switchover.theta_obs_rad = s_observer.theta_rad;
-  snapshot->switchover.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
-  snapshot->switchover.angle_err_deg = s_switchover.angle_err_deg;
-  snapshot->switchover.open_speed_rad_s = FOC_OpenLoopGetElecSpeedRadPerSec(&s_openloop);
-  snapshot->switchover.obs_speed_rad_s = s_observer.speed_rad_s;
-  snapshot->switchover.speed_err_rad_s = s_switchover.speed_err_rad_s;
-  snapshot->switchover.fail_reason = s_switchover.fail_reason;
-  snapshot->switchover.last_blend_reset_reason = s_switchover.last_blend_reset_reason;
-  snapshot->switchover.blend_reset_count = s_switchover.blend_reset_count;
-  snapshot->switchover.last_blend_reset_angle_err_deg = s_switchover.last_blend_reset_angle_err_deg;
+  snapshot->handover.state = (uint8_t)s_handover.state;
+  snapshot->handover.observer_ready = s_handover.observer_ready;
+  snapshot->handover.ready_now = s_handover.ready_now;
+  snapshot->handover.locked = s_handover.locked;
+  snapshot->handover.hold_ticks = s_handover.hold_ticks;
+  snapshot->handover.lock_hold_ticks = s_handover.lock_hold_ticks;
+  snapshot->handover.blend_ticks = s_handover.blend_ticks;
+  snapshot->handover.blend_k = s_handover.blend_k;
+  snapshot->handover.theta_open_rad = s_startup.theta_e_rad;
+  snapshot->handover.theta_obs_rad = s_observer.theta_rad;
+  snapshot->handover.theta_ctrl_rad = s_current_loop.theta_ctrl_rad;
+  snapshot->handover.angle_err_deg = s_handover.angle_err_deg;
+  snapshot->handover.open_speed_rad_s = FOC_Startup_GetElecSpeedRadPerSec(&s_startup);
+  snapshot->handover.obs_speed_rad_s = s_observer.speed_rad_s;
+  snapshot->handover.speed_err_rad_s = s_handover.speed_err_rad_s;
+  snapshot->handover.fail_reason = s_handover.fail_reason;
+  snapshot->handover.last_blend_reset_reason = s_handover.last_blend_reset_reason;
+  snapshot->handover.blend_reset_count = s_handover.blend_reset_count;
+  snapshot->handover.last_blend_reset_angle_err_deg = s_handover.last_blend_reset_angle_err_deg;
 }
 
 static void app_foc_update_runtime_snapshot(void)
@@ -548,13 +548,13 @@ static void app_foc_run_align(void)
   float valpha = 0.0f;
   float vbeta = 0.0f;
 
-  if (s_openloop.align_ticks == 0u)
+  if (s_startup.align_ticks == 0u)
   {
     app_foc_drive_enable(1u);
   }
 
-  app_foc_sampling_update();
-  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  app_foc_current_sense_update();
+  s_fault_flags = FOC_ProtectionCheckFault(&s_current_sense);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
     app_foc_enter_fault();
@@ -568,10 +568,10 @@ static void app_foc_run_align(void)
    *
    * 这样比固定电压对齐更柔和，也更符合当前主线已经切到电流环的结构。
    */
-  s_openloop.theta_e_rad = 0.0f;
+  s_startup.theta_e_rad = 0.0f;
   FOC_CurrentLoopRunWithRef(&s_current_loop,
-                            &s_sampling,
-                            s_openloop.theta_e_rad,
+                            &s_current_sense,
+                            s_startup.theta_e_rad,
                             FOC_ALIGN_ID_REF_A,
                             0.0f,
                             &valpha,
@@ -579,7 +579,7 @@ static void app_foc_run_align(void)
   /* 对齐阶段只保留 d 轴磁场，直接把 q 轴电压清零，避免额外转矩导致持续抖动。 */
   vdq.d = s_current_loop.vd_cmd_v;
   vdq.q = 0.0f;
-  ClarkePark_InvPark(&vdq, s_openloop.theta_e_rad, &vab);
+  ClarkePark_InvPark(&vdq, s_startup.theta_e_rad, &vab);
   s_current_loop.vq_cmd_v = 0.0f;
   s_current_loop.valpha_cmd_v = vab.alpha;
   s_current_loop.vbeta_cmd_v = vab.beta;
@@ -587,7 +587,7 @@ static void app_foc_run_align(void)
   vbeta = s_current_loop.vbeta_cmd_v;
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_ALIGN);
 
-  s_openloop.align_ticks++;
+  s_startup.align_ticks++;
   /* 对齐结束后的状态跳转交给中频任务处理。
    * 高频这里只负责持续输出对齐磁场并累计 ticks。 */
 }
@@ -611,24 +611,24 @@ static void app_foc_run_openloop(void)
   float valpha = 0.0f;
   float vbeta = 0.0f;
 
-  app_foc_sampling_update();
-  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  app_foc_current_sense_update();
+  s_fault_flags = FOC_ProtectionCheckFault(&s_current_sense);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
     app_foc_enter_fault();
     return;
   }
 
-  FOC_OpenLoopAdvance(&s_openloop);
-  FOC_SwitchoverUpdate(&s_switchover, &s_openloop, &s_observer);
-  theta_ctrl = FOC_SwitchoverSelectTheta(&s_switchover, &s_openloop, &s_observer);
+  FOC_Startup_Update(&s_startup);
+  FOC_Handover_Update(&s_handover, &s_startup, &s_observer);
+  theta_ctrl = FOC_Handover_SelectTheta(&s_handover, &s_startup, &s_observer);
 
 #if (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_CURRENT)
   /* OPENLOOP 开始即使用 Id/Iq 双电流环。
    * d 轴通过 gain + vd_limit 软释放，避免后续 RUN 阶段突然接管。 */
   app_foc_d_axis_soft_update();
   FOC_CurrentLoopRunDSoft(&s_current_loop,
-                          &s_sampling,
+                          &s_current_sense,
                           theta_ctrl,
                           cmd.id_ref_a,
                           cmd.iq_ref_a,
@@ -637,25 +637,25 @@ static void app_foc_run_openloop(void)
                           &valpha,
                           &vbeta);
 #elif (FOC_OPENLOOP_CTRL_MODE == FOC_CTRL_MODE_OPENLOOP_DQ_VOLT_TEST)
-  FOC_CurrentLoopRunOpenLoopVoltTest(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
+  FOC_CurrentLoopRunOpenLoopVoltTest(&s_current_loop, &s_current_sense, theta_ctrl, &valpha, &vbeta);
 #else
-  FOC_CurrentLoopRunOpenLoopVf(&s_current_loop, &s_sampling, theta_ctrl, &valpha, &vbeta);
+  FOC_CurrentLoopRunOpenLoopVf(&s_current_loop, &s_current_sense, theta_ctrl, &valpha, &vbeta);
 #endif
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_OPENLOOP);
 
   FOC_ObserverUpdate(&s_observer,
-                     &s_sampling,
+                     &s_current_sense,
                      valpha,
                      vbeta);
 }
 
 static void app_foc_sync_feedback_from_modules(void)
 {
-  s_feedback.offset_done = (s_sampling.offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES) ? 1u : 0u;
-  s_feedback.observer_ready = s_switchover.observer_ready;
-  s_feedback.align_ticks = s_openloop.align_ticks;
-  s_feedback.mech_freq_hz = s_openloop.mech_freq_hz;
+  s_feedback.offset_done = (s_current_sense.offset_samples >= FOC_CURRENT_OFFSET_CALIB_SAMPLES) ? 1u : 0u;
+  s_feedback.observer_ready = s_handover.observer_ready;
+  s_feedback.align_ticks = s_startup.align_ticks;
+  s_feedback.mech_freq_hz = s_startup.mech_freq_hz;
   s_feedback.fault_flags = s_fault_flags;
 }
 
@@ -707,9 +707,9 @@ static void app_foc_medium_handle_state_machine(void)
       {
         /* 刚进入 IDLE 时做一次性清理，
          * 不要每个 1 ms 周期都 reset，避免把状态一直洗掉。 */
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Handover_Reset(&s_handover);
         FOC_CurrentLoopReset(&s_current_loop);
-        FOC_OpenLoopResetAlign(&s_openloop);
+        FOC_Startup_ResetAlign(&s_startup);
       }
       break;
 
@@ -723,14 +723,14 @@ static void app_foc_medium_handle_state_machine(void)
       if (state_changed != 0u)
       {
         /* 进入零点校准时，把后续运行相关模块先清一次。 */
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Handover_Reset(&s_handover);
         FOC_CurrentLoopReset(&s_current_loop);
-        FOC_OpenLoopResetAlign(&s_openloop);
+        FOC_Startup_ResetAlign(&s_startup);
       }
 
       if (s_feedback.offset_done != 0u)
       {
-        FOC_OpenLoopResetAlign(&s_openloop);
+        FOC_Startup_ResetAlign(&s_startup);
         s_state = FOC_STATE_ALIGN;
       }
       break;
@@ -744,15 +744,15 @@ static void app_foc_medium_handle_state_machine(void)
 
       if (state_changed != 0u)
       {
-        FOC_OpenLoopResetAlign(&s_openloop);
+        FOC_Startup_ResetAlign(&s_startup);
       }
 
       if (s_feedback.align_ticks >= align_ticks_target)
       {
         /* 对齐结束后，把开环、电流环、接管器清一次，
          * 保证进入 OPENLOOP 时从干净状态开始。 */
-        FOC_OpenLoopResetRun(&s_openloop);
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Startup_ResetRun(&s_startup);
+        FOC_Handover_Reset(&s_handover);
         FOC_CurrentLoopReset(&s_current_loop);
         app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
@@ -769,14 +769,14 @@ static void app_foc_medium_handle_state_machine(void)
 
       if (state_changed != 0u)
       {
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Handover_Reset(&s_handover);
         FOC_CurrentLoopReset(&s_current_loop);
-        FOC_OpenLoopResetRun(&s_openloop);
+        FOC_Startup_ResetRun(&s_startup);
         app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
       }
 
-      if (s_switchover.state == FOC_SW_STATE_OBSERVER)
+      if (s_handover.state == FOC_HANDOVER_STATE_OBSERVER)
       {
         /* 先准备 RUN 入口，再切换状态，避免 RUN 首拍 Iq-only hold 未生效。 */
         app_foc_prepare_run_entry();
@@ -808,10 +808,10 @@ static void app_foc_medium_handle_state_machine(void)
       }
 
       /* 当前版本仍保留最小回退：若接管状态丢失，则退回 OPENLOOP。 */
-      if (s_switchover.state != FOC_SW_STATE_OBSERVER)
+      if (s_handover.state != FOC_HANDOVER_STATE_OBSERVER)
       {
-        FOC_OpenLoopResetRun(&s_openloop);
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Startup_ResetRun(&s_startup);
+        FOC_Handover_Reset(&s_handover);
         app_foc_d_axis_soft_reset();
         s_run_entry_prepared = 0u;
         s_state = FOC_STATE_OPENLOOP;
@@ -831,7 +831,7 @@ static void app_foc_medium_handle_state_machine(void)
       if (state_changed != 0u)
       {
         FOC_CurrentLoopReset(&s_current_loop);
-        FOC_SwitchoverReset(&s_switchover);
+        FOC_Handover_Reset(&s_handover);
       }
       break;
 
@@ -852,8 +852,8 @@ static void app_foc_run_run(void)
   float valpha = 0.0f;
   float vbeta = 0.0f;
 
-  app_foc_sampling_update();
-  s_fault_flags = FOC_ProtectionCheckFault(&s_sampling);
+  app_foc_current_sense_update();
+  s_fault_flags = FOC_ProtectionCheckFault(&s_current_sense);
   if (s_fault_flags != FOC_FAULT_NONE)
   {
     app_foc_enter_fault();
@@ -866,22 +866,22 @@ static void app_foc_run_run(void)
 
   app_foc_d_axis_soft_update();
   FOC_CurrentLoopRunDSoftFeedForward(&s_current_loop,
-                                     &s_sampling,
+                                     &s_current_sense,
                                      theta_ctrl,
                                      cmd.id_ref_a,
                                      cmd.iq_ref_a,
                                      s_d_axis_enable_k,
                                      s_d_axis_vd_limit_v,
                                      FOC_ObserverGetSpeedRadPerSec(&s_observer),
-                                     s_sampling.vbus_v,
+                                     s_current_sense.vbus_v,
                                      &valpha,
                                      &vbeta);
 
   app_foc_apply_voltage_command(&valpha, &vbeta, FOC_DT_COMP_ENABLE_RUN);
 
-  /* observer 仍在后台更新；接管判定统一由 switchover 模块负责。 */
+  /* observer 仍在后台更新；接管判定统一由 handover 模块负责。 */
   FOC_ObserverUpdate(&s_observer,
-                     &s_sampling,
+                     &s_current_sense,
                      valpha,
                      vbeta);
 }
@@ -894,18 +894,18 @@ void AppFoc_Init(void)
   AppFocTiming_Init();
 #endif
 
-  FOC_SamplingModule_Init(&s_sampling);
-  FOC_PwmModule_Init(&s_pwm);
+  FOC_CurrentSense_Init(&s_current_sense);
+  FOC_Svpwm_Init(&s_svpwm);
 #if (APP_FOC_DEADTIME_ACTIVE != 0u)
   FOC_DeadtimeComp_Init(&s_deadtime);
 #endif
 #if (FOC_HF_DEBUG_SNAPSHOT_ENABLE != 0u)
-  FOC_DebugModule_Init(&s_debug);
+  FOC_Trace_Init(&s_trace);
 #endif
   FOC_CurrentLoopInit(&s_current_loop);
-  FOC_OpenLoopInit(&s_openloop);
+  FOC_Startup_Init(&s_startup);
   FOC_ObserverInit(&s_observer);
-  FOC_SwitchoverInit(&s_switchover);
+  FOC_Handover_Init(&s_handover);
   FOC_SpeedLoopInit(&s_speed_loop);
   app_foc_medium_reset_command_defaults();
   app_foc_commit_command_active();
@@ -941,7 +941,7 @@ void AppFoc_Start(void)
 
   /* 启动 ADC 常规/注入转换。 */
   HAL_ADC_Start(&hadc1);
-  FOC_SamplingModule_SetAdc1Ready(&s_sampling, 1u);
+  FOC_CurrentSense_SetAdc1Ready(&s_current_sense, 1u);
   HAL_ADCEx_InjectedStart(&hadc1);
   HAL_ADCEx_InjectedStart_IT(&hadc2);
 
@@ -950,16 +950,16 @@ void AppFoc_Start(void)
 #if (APP_FOC_DEADTIME_ACTIVE != 0u)
   FOC_DeadtimeComp_Reset(&s_deadtime);
 #endif
-  FOC_SwitchoverReset(&s_switchover);
+  FOC_Handover_Reset(&s_handover);
   FOC_CurrentLoopReset(&s_current_loop);
-  FOC_OpenLoopResetAlign(&s_openloop);
-  FOC_OpenLoopResetRun(&s_openloop);
+  FOC_Startup_ResetAlign(&s_startup);
+  FOC_Startup_ResetRun(&s_startup);
 
-  s_sampling.offset_samples = 0u;
-  s_sampling.offset_sum_u = 0.0f;
-  s_sampling.offset_sum_v = 0.0f;
-  s_sampling.offset_sum_w = 0.0f;
-  FOC_SamplingModule_ResetRuntime(&s_sampling);
+  s_current_sense.offset_samples = 0u;
+  s_current_sense.offset_sum_u = 0.0f;
+  s_current_sense.offset_sum_v = 0.0f;
+  s_current_sense.offset_sum_w = 0.0f;
+  FOC_CurrentSense_ResetRuntime(&s_current_sense);
 
   /* 启动后先保持中点输出并关闭驱动，等待零点校准。 */
   app_foc_medium_reset_command_defaults();
@@ -1001,7 +1001,7 @@ void AppFoc_Stop(void)
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_2);
   HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_3);
 
-  FOC_SamplingModule_SetAdc1Ready(&s_sampling, 0u);
+  FOC_CurrentSense_SetAdc1Ready(&s_current_sense, 0u);
   s_state = FOC_STATE_IDLE;
   s_fault_flags = FOC_FAULT_NONE;
 #if (APP_FOC_DEADTIME_ACTIVE != 0u)
@@ -1050,7 +1050,7 @@ void AppFoc_HighFreqTask(void)
       app_foc_force_mid_output();
       app_foc_clear_current_loop_debug();
       app_foc_drive_enable(0u);
-      FOC_SamplingModule_RunOffsetCalib(&s_sampling, &next_state);
+      FOC_CurrentSense_RunOffsetCalib(&s_current_sense, &next_state);
 
       /* 高频里只产生“零点校准完成”这一事实，
        * 真正切到 ALIGN 交给中频状态机。 */
@@ -1087,7 +1087,7 @@ void AppFoc_HighFreqTask(void)
 
 #if (FOC_HF_DEBUG_SNAPSHOT_ENABLE != 0u)
   /* 高频采样/PWM细节快照默认关闭；排查采样时再打开。 */
-  FOC_DebugModule_UpdateSnapshot(&s_debug, &s_sampling, &s_pwm);
+  FOC_Trace_UpdateSnapshot(&s_trace, &s_current_sense, &s_svpwm);
 #endif
 
 #if (APP_DWT_TIMING_ENABLE != 0u)
@@ -1100,10 +1100,10 @@ FOC_StateTypeDef AppFoc_GetState(void)
   return s_state;
 }
 
-uint8_t AppFoc_GetDebugSnapshot(FOC_DebugSnapshot_t *snapshot)
+uint8_t AppFoc_GetTraceSnapshot(FOC_TraceSnapshot_t *snapshot)
 {
 #if (FOC_HF_DEBUG_SNAPSHOT_ENABLE != 0u)
-  return FOC_DebugModule_GetSnapshot(&s_debug, snapshot);
+  return FOC_Trace_GetSnapshot(&s_trace, snapshot);
 #else
   (void)snapshot;
   return 0u;

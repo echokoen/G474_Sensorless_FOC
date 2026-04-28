@@ -40,13 +40,13 @@ objects\main.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\main.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 objects\main.o: ../Drivers/BSP/bsp_adc.h
 objects\main.o: ../Drivers/BSP/bsp_cordic.h
-objects\main.o: ../Core/Inc/foc_config.h
+objects\main.o: ../Config/foc_config.h
 objects\main.o: ../Drivers/BSP/bsp_dma.h
 objects\main.o: ../Drivers/BSP/bsp_key.h
 objects\main.o: ../Drivers/BSP/bsp_tim.h
 objects\main.o: ../Drivers/BSP/bsp_usart.h
 objects\main.o: ../Drivers/BSP/bsp_gpio.h
-objects\main.o: ..\App\app_debug.h
-objects\main.o: ..\App\app_foc.h
-objects\main.o: ..\Control\foc_types.h
+objects\main.o: ../App/app_debug.h
+objects\main.o: ../App/app_foc.h
+objects\main.o: ../Control/Common/foc_types.h
 objects\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

@@ -1,9 +1,9 @@
-objects\foc_current_loop.o: ..\Control\foc_current_loop.c
-objects\foc_current_loop.o: ..\Control\foc_current_loop.h
-objects\foc_current_loop.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
-objects\foc_current_loop.o: ../Core/Inc/PMSM_Control_Core/Clarke_Park.h
-objects\foc_current_loop.o: ..\Control\foc_sampling.h
-objects\foc_current_loop.o: ..\Control\foc_types.h
+objects\foc_current_loop.o: ../Control/Loop/foc_current_loop.c
+objects\foc_current_loop.o: ../Control/Loop/foc_current_loop.h
+objects\foc_current_loop.o: ../Control/Model/foc_pi_controller.h
+objects\foc_current_loop.o: ../Control/Model/foc_clarke_park.h
+objects\foc_current_loop.o: ../Control/Sensing/foc_current_sense.h
+objects\foc_current_loop.o: ../Control/Common/foc_types.h
 objects\foc_current_loop.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-objects\foc_current_loop.o: ../Core/Inc/foc_config.h
+objects\foc_current_loop.o: ../Config/foc_config.h
 objects\foc_current_loop.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

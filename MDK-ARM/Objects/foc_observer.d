@@ -1,6 +1,6 @@
-objects\foc_observer.o: ..\Control\foc_observer.c
-objects\foc_observer.o: ..\Control\foc_observer.h
-objects\foc_observer.o: ../Core/Inc/PMSM_Control_Core/FluxObserver_PLL.h
+objects\foc_observer.o: ../Control/Observer/foc_observer.c
+objects\foc_observer.o: ../Control/Observer/foc_observer.h
+objects\foc_observer.o: ../Control/Model/foc_flux_observer_pll.h
 objects\foc_observer.o: ../Core/Inc/main.h
 objects\foc_observer.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h
 objects\foc_observer.o: ../Core/Inc/stm32g4xx_hal_conf.h
@@ -40,8 +40,8 @@ objects\foc_observer.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h
 objects\foc_observer.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h
 objects\foc_observer.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\foc_observer.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
-objects\foc_observer.o: ../Core/Inc/foc_config.h
-objects\foc_observer.o: ..\Control\foc_sampling.h
-objects\foc_observer.o: ..\Control\foc_types.h
-objects\foc_observer.o: ..\Control\foc_math.h
+objects\foc_observer.o: ../Config/foc_config.h
+objects\foc_observer.o: ../Control/Sensing/foc_current_sense.h
+objects\foc_observer.o: ../Control/Common/foc_types.h
+objects\foc_observer.o: ../Control/Common/foc_math.h
 objects\foc_observer.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

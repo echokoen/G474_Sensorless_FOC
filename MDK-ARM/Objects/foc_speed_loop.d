@@ -1,9 +1,9 @@
-objects\foc_speed_loop.o: ..\Control\foc_speed_loop.c
-objects\foc_speed_loop.o: ..\Control\foc_speed_loop.h
-objects\foc_speed_loop.o: ../Core/Inc/PMSM_Control_Core/PI_Controller.h
-objects\foc_speed_loop.o: ..\Control\foc_types.h
+objects\foc_speed_loop.o: ../Control/Loop/foc_speed_loop.c
+objects\foc_speed_loop.o: ../Control/Loop/foc_speed_loop.h
+objects\foc_speed_loop.o: ../Control/Model/foc_pi_controller.h
+objects\foc_speed_loop.o: ../Control/Common/foc_types.h
 objects\foc_speed_loop.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-objects\foc_speed_loop.o: ../Core/Inc/foc_config.h
+objects\foc_speed_loop.o: ../Config/foc_config.h
 objects\foc_speed_loop.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal.h
 objects\foc_speed_loop.o: ../Core/Inc/stm32g4xx_hal_conf.h
 objects\foc_speed_loop.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_rcc.h

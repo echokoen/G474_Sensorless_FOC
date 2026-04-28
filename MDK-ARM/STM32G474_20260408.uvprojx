@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/BSP;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include;..\App;..\Control</IncludePath>
+              <IncludePath>../Core/Inc;../Config;../App;../Control/Common;../Control/Model;../Control/Sensing;../Control/Modulation;../Control/Loop;../Control/Startup;../Control/Observer;../Control/Safety;../Control/Trace;../Drivers/BSP;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -382,7 +382,7 @@
       </TargetOption>
       <Groups>
         <Group>
-          <GroupName>Application/MDK-ARM</GroupName>
+          <GroupName>Startup</GroupName>
           <Files>
             <File>
               <FileName>startup_stm32g474xx.s</FileName>
@@ -392,7 +392,7 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Application/User/Core</GroupName>
+          <GroupName>Core</GroupName>
           <Files>
             <File>
               <FileName>main.c</FileName>
@@ -400,54 +400,129 @@
               <FilePath>../Core/Src/main.c</FilePath>
             </File>
             <File>
+              <FileName>main.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Core/Inc/main.h</FilePath>
+            </File>
+            <File>
               <FileName>stm32g4xx_it.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_it.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx_it.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Core/Inc/stm32g4xx_it.h</FilePath>
             </File>
             <File>
               <FileName>stm32g4xx_hal_msp.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32g4xx_hal_msp.c</FilePath>
             </File>
+            <File>
+              <FileName>stm32g4xx_hal_conf.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Core/Inc/stm32g4xx_hal_conf.h</FilePath>
+            </File>
+            <File>
+              <FileName>system_stm32g4xx.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/system_stm32g4xx.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Application</GroupName>
+          <GroupName>Config</GroupName>
           <Files>
             <File>
               <FileName>foc_config.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Core\Inc\foc_config.h</FilePath>
+              <FilePath>../Config/foc_config.h</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>BSP</GroupName>
+          <Files>
             <File>
-              <FileName>FluxObserver_PLL.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Core\Inc\PMSM_Control_Core\FluxObserver_PLL.h</FilePath>
-            </File>
-            <File>
-              <FileName>FluxObserver_PLL.c</FileName>
+              <FileName>bsp_adc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Core\Src\PMSM_Control_Core\FluxObserver_PLL.c</FilePath>
+              <FilePath>../Drivers/BSP/bsp_adc.c</FilePath>
             </File>
             <File>
-              <FileName>Clarke_Park.h</FileName>
+              <FileName>bsp_adc.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Core\Inc\PMSM_Control_Core\Clarke_Park.h</FilePath>
+              <FilePath>../Drivers/BSP/bsp_adc.h</FilePath>
             </File>
             <File>
-              <FileName>Clarke_Park.c</FileName>
+              <FileName>bsp_tim.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Core\Src\PMSM_Control_Core\Clarke_Park.c</FilePath>
+              <FilePath>../Drivers/BSP/bsp_tim.c</FilePath>
             </File>
             <File>
-              <FileName>PI_Controller.h</FileName>
+              <FileName>bsp_tim.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Core\Inc\PMSM_Control_Core\PI_Controller.h</FilePath>
+              <FilePath>../Drivers/BSP/bsp_tim.h</FilePath>
             </File>
             <File>
-              <FileName>PI_Controller.c</FileName>
+              <FileName>bsp_usart.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Core\Src\PMSM_Control_Core\PI_Controller.c</FilePath>
+              <FilePath>../Drivers/BSP/bsp_usart.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_usart.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_usart.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_gpio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/BSP/bsp_gpio.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_gpio.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_gpio.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/BSP/bsp_dma.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_dma.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_dma.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/BSP/bsp_key.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_key.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_key.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_dac.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/BSP/bsp_dac.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_dac.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_dac.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_cordic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/BSP/bsp_cordic.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_cordic.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/BSP/bsp_cordic.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -455,159 +530,199 @@
           <GroupName>App</GroupName>
           <Files>
             <File>
-              <FileName>app_foc.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\App\app_foc.h</FilePath>
-            </File>
-            <File>
               <FileName>app_foc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\App\app_foc.c</FilePath>
+              <FilePath>../App/app_foc.c</FilePath>
             </File>
             <File>
-              <FileName>app_foc_timing.h</FileName>
+              <FileName>app_foc.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\App\app_foc_timing.h</FilePath>
+              <FilePath>../App/app_foc.h</FilePath>
             </File>
             <File>
               <FileName>app_foc_timing.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\App\app_foc_timing.c</FilePath>
+              <FilePath>../App/app_foc_timing.c</FilePath>
             </File>
             <File>
-              <FileName>app_debug.h</FileName>
+              <FileName>app_foc_timing.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\App\app_debug.h</FilePath>
+              <FilePath>../App/app_foc_timing.h</FilePath>
             </File>
             <File>
               <FileName>app_debug.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\App\app_debug.c</FilePath>
+              <FilePath>../App/app_debug.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_debug.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../App/app_debug.h</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Control</GroupName>
+          <GroupName>MotorControl</GroupName>
           <Files>
             <File>
               <FileName>foc_types.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_types.h</FilePath>
-            </File>
-            <File>
-              <FileName>foc_math.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Control\foc_math.h</FilePath>
+              <FilePath>../Control/Common/foc_types.h</FilePath>
             </File>
             <File>
               <FileName>foc_math.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_math.c</FilePath>
+              <FilePath>../Control/Common/foc_math.c</FilePath>
             </File>
             <File>
-              <FileName>foc_sampling.h</FileName>
+              <FileName>foc_math.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_sampling.h</FilePath>
+              <FilePath>../Control/Common/foc_math.h</FilePath>
             </File>
             <File>
-              <FileName>foc_sampling.c</FileName>
+              <FileName>foc_current_sense.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_sampling.c</FilePath>
+              <FilePath>../Control/Sensing/foc_current_sense.c</FilePath>
             </File>
             <File>
-              <FileName>foc_pwm.h</FileName>
+              <FileName>foc_current_sense.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_pwm.h</FilePath>
+              <FilePath>../Control/Sensing/foc_current_sense.h</FilePath>
             </File>
             <File>
-              <FileName>foc_pwm.c</FileName>
+              <FileName>foc_svpwm.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_pwm.c</FilePath>
+              <FilePath>../Control/Modulation/foc_svpwm.c</FilePath>
             </File>
             <File>
-              <FileName>foc_current_loop.h</FileName>
+              <FileName>foc_svpwm.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_current_loop.h</FilePath>
+              <FilePath>../Control/Modulation/foc_svpwm.h</FilePath>
             </File>
             <File>
               <FileName>foc_current_loop.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_current_loop.c</FilePath>
+              <FilePath>../Control/Loop/foc_current_loop.c</FilePath>
             </File>
             <File>
-              <FileName>foc_speed_loop.h</FileName>
+              <FileName>foc_current_loop.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_speed_loop.h</FilePath>
+              <FilePath>../Control/Loop/foc_current_loop.h</FilePath>
             </File>
             <File>
               <FileName>foc_speed_loop.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_speed_loop.c</FilePath>
+              <FilePath>../Control/Loop/foc_speed_loop.c</FilePath>
             </File>
             <File>
-              <FileName>foc_openloop.h</FileName>
+              <FileName>foc_speed_loop.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_openloop.h</FilePath>
+              <FilePath>../Control/Loop/foc_speed_loop.h</FilePath>
             </File>
             <File>
-              <FileName>foc_openloop.c</FileName>
+              <FileName>foc_startup.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_openloop.c</FilePath>
+              <FilePath>../Control/Startup/foc_startup.c</FilePath>
             </File>
             <File>
-              <FileName>foc_observer.h</FileName>
+              <FileName>foc_startup.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_observer.h</FilePath>
+              <FilePath>../Control/Startup/foc_startup.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_handover.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Control/Startup/foc_handover.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_handover.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Control/Startup/foc_handover.h</FilePath>
             </File>
             <File>
               <FileName>foc_observer.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_observer.c</FilePath>
+              <FilePath>../Control/Observer/foc_observer.c</FilePath>
             </File>
             <File>
-              <FileName>foc_switchover.h</FileName>
+              <FileName>foc_observer.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_switchover.h</FilePath>
+              <FilePath>../Control/Observer/foc_observer.h</FilePath>
             </File>
             <File>
-              <FileName>foc_switchover.c</FileName>
+              <FileName>foc_deadtime_comp.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_switchover.c</FilePath>
+              <FilePath>../Control/Modulation/foc_deadtime_comp.c</FilePath>
             </File>
             <File>
-              <FileName>foc_protection.h</FileName>
+              <FileName>foc_deadtime_comp.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_protection.h</FilePath>
+              <FilePath>../Control/Modulation/foc_deadtime_comp.h</FilePath>
             </File>
             <File>
               <FileName>foc_protection.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Control\foc_protection.c</FilePath>
+              <FilePath>../Control/Safety/foc_protection.c</FilePath>
             </File>
             <File>
-              <FileName>foc_debug.h</FileName>
+              <FileName>foc_protection.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\Control\foc_debug.h</FilePath>
-            </File>
-            <File>
-              <FileName>foc_debug.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Control\foc_debug.c</FilePath>
-            </File>
-            <File>
-              <FileName>foc_deadtime.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Control\foc_deadtime.c</FilePath>
-            </File>
-            <File>
-              <FileName>foc_deadtime.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Control\foc_deadtime.h</FilePath>
+              <FilePath>../Control/Safety/foc_protection.h</FilePath>
             </File>
           </Files>
         </Group>
         <Group>
-          <GroupName>Drivers/STM32G4xx_HAL_Driver</GroupName>
+          <GroupName>MotorModel</GroupName>
+          <Files>
+            <File>
+              <FileName>foc_clarke_park.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Control/Model/foc_clarke_park.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_clarke_park.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Control/Model/foc_clarke_park.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_pi_controller.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Control/Model/foc_pi_controller.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_pi_controller.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Control/Model/foc_pi_controller.h</FilePath>
+            </File>
+            <File>
+              <FileName>foc_flux_observer_pll.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Control/Model/foc_flux_observer_pll.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_flux_observer_pll.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Control/Model/foc_flux_observer_pll.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Diagnostics</GroupName>
+          <Files>
+            <File>
+              <FileName>foc_trace.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Control/Trace/foc_trace.c</FilePath>
+            </File>
+            <File>
+              <FileName>foc_trace.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Control/Trace/foc_trace.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>ST_HAL</GroupName>
           <Files>
             <File>
               <FileName>stm32g4xx_hal_adc.c</FileName>
@@ -727,62 +842,29 @@
           </Files>
         </Group>
         <Group>
-          <GroupName>Drivers/CMSIS</GroupName>
+          <GroupName>CMSIS</GroupName>
           <Files>
             <File>
-              <FileName>system_stm32g4xx.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Core/Src/system_stm32g4xx.c</FilePath>
+              <FileName>core_cm4.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/CMSIS/Include/core_cm4.h</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g474xx.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/CMSIS/Device/ST/STM32G4xx/Include/stm32g474xx.h</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/CMSIS/Device/ST/STM32G4xx/Include/stm32g4xx.h</FilePath>
+            </File>
+            <File>
+              <FileName>system_stm32g4xx.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../Drivers/CMSIS/Device/ST/STM32G4xx/Include/system_stm32g4xx.h</FilePath>
             </File>
           </Files>
-        </Group>
-        <Group>
-          <GroupName>Drivers/BSP</GroupName>
-          <Files>
-            <File>
-              <FileName>bsp_usart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_usart.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_tim.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_tim.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_dma.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_dma.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_key.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_key.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_dac.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_dac.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_cordic.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_cordic.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_adc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_adc.c</FilePath>
-            </File>
-            <File>
-              <FileName>bsp_gpio.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/BSP/bsp_gpio.c</FilePath>
-            </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>Control/Model</GroupName>
         </Group>
         <Group>
           <GroupName>::CMSIS</GroupName>
