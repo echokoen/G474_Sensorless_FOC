@@ -39,5 +39,14 @@ objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex
 objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\stm32g4xx_it.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
 objects\stm32g4xx_it.o: ../Core/Inc/stm32g4xx_it.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/FreeRTOS.h
+objects\stm32g4xx_it.o: ../Core/Inc/FreeRTOSConfig.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/projdefs.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/portable.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/deprecated_definitions.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/portable/RVDS/ARM_CM4F/portmacro.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/mpu_wrappers.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/task.h
+objects\stm32g4xx_it.o: ../Middlewares/FreeRTOS/include/list.h
 objects\stm32g4xx_it.o: ../App/app_foc.h
 objects\stm32g4xx_it.o: ../Control/Common/foc_types.h

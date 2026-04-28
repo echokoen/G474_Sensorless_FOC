@@ -129,7 +129,7 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
     __HAL_RCC_TIM1_CLK_ENABLE();
 
     /* TIM1 interrupt Init */
-    HAL_NVIC_SetPriority(TIM1_BRK_TIM15_IRQn, 4, 1);
+    HAL_NVIC_SetPriority(TIM1_BRK_TIM15_IRQn, 4, 0);
     HAL_NVIC_EnableIRQ(TIM1_BRK_TIM15_IRQn);
     /* FOC high-frequency task is triggered by ADC2 injected complete callback.
        TIM1 Update IRQ is not the FOC scheduler entry. */

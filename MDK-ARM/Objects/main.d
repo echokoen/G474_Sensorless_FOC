@@ -49,4 +49,5 @@ objects\main.o: ../Drivers/BSP/bsp_gpio.h
 objects\main.o: ../App/app_debug.h
 objects\main.o: ../App/app_foc.h
 objects\main.o: ../Control/Common/foc_types.h
+objects\main.o: ../App/app_rtos.h
 objects\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

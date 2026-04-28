@@ -41,5 +41,3 @@ objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim.h
 objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_tim_ex.h
 objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart.h
 objects\app_debug.o: ../Drivers/STM32G4xx_HAL_Driver/Inc/stm32g4xx_hal_uart_ex.h
-objects\app_debug.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
-objects\app_debug.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h

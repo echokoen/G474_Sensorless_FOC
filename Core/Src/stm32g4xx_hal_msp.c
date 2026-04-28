@@ -71,9 +71,15 @@ void HAL_MspInit(void)
   __HAL_RCC_SYSCFG_CLK_ENABLE();
   __HAL_RCC_PWR_CLK_ENABLE();
 
-  HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_3);
+  HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 
   /* System interrupt init*/
+  HAL_NVIC_SetPriority(TIM1_UP_TIM16_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(ADC1_2_IRQn, 2, 0);
+  HAL_NVIC_SetPriority(TIM1_BRK_TIM15_IRQn, 4, 0);
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 6, 0);
+  HAL_NVIC_SetPriority(USART1_IRQn, 6, 0);
 
   /** Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
   */

@@ -219,12 +219,12 @@ extern "C" {
 /* ==================== 工程清洁 / 调试开关 ==================== */
 /* 这些开关只控制调试通道和辅助功能是否进入主路径；默认关闭，减少运行噪声和代码耦合。 */
 #define APP_BOOT_PRINT_ENABLE          (0u)  /* 1=上电后打印启动提示。 */
-#define APP_DEBUG_PRINT_ENABLE         (1u)  /* 1=周期性串口打印运行快照；当前打开用于前馈调试。 */
+#define APP_DEBUG_PRINT_ENABLE         (0u)  /* 1=周期性串口打印运行快照；当前打开用于前馈调试。 */
 #define APP_KEY_PRINT_ENABLE           (0u)  /* 1=按键调速/启停时打印日志。 */
 #define APP_DEBUG_DAC_ENABLE           (0u)  /* 1=初始化 DAC 调试输出；当前主线未使用，默认关闭。 */
 #define FOC_HF_DEBUG_SNAPSHOT_ENABLE   (0u)  /* 1=每个高频周期刷新采样/PWM调试快照；排查采样时再打开。 */
 #define APP_DWT_TIMING_ENABLE         (1u)  /* 1=启用 DWT CYCCNT 统计 AppFoc_HighFreqTask 耗时；只记录，不在高频中断打印。 */
-#define APP_DWT_TIMING_PRINT_ENABLE   (1u)  /* 1=当 APP_DEBUG_PRINT_ENABLE 打开时，同时打印高频耗时统计。 */
+#define APP_DWT_TIMING_PRINT_ENABLE   (0u)  /* 1=当 APP_DEBUG_PRINT_ENABLE 打开时，同时打印高频耗时统计。 */
 #define APP_DWT_TIMING_OVERRUN_US     (50u) /* 高频任务超过该时间则累计 overrun_count；16kHz 周期为 62.5us。 */
 
 /* ==================== 调试参数 ==================== */

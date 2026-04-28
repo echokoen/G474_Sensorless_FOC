@@ -31,6 +31,7 @@
 #include "bsp_gpio.h"
 #include "app_debug.h"
 #include "app_foc.h"
+#include "app_rtos.h"
 #include "stdio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -110,10 +111,10 @@ int main(void)
 #endif
   BSP_KEY_Init();
   AppFoc_Init();
-  AppFoc_Start();
 #if (APP_BOOT_PRINT_ENABLE != 0u)
-  printf("FOC application started\r\n");
+  printf("FOC application initialized, starting FreeRTOS\r\n");
 #endif
+  AppRtos_Start();
 
   /* USER CODE END 2 */
 
@@ -124,9 +125,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    BSP_KEY_Task();
-    AppFoc_MediumFreqTask();
-    AppDebug_Task();
   }
   /* USER CODE END 3 */
 }

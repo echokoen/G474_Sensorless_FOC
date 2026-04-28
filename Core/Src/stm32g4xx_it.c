@@ -19,6 +19,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "FreeRTOS.h"
+#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +41,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
+extern void xPortSysTickHandler(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -91,21 +94,18 @@ void UsageFault_Handler(void)
   }
 }
 
-void SVC_Handler(void)
-{
-}
-
 void DebugMon_Handler(void)
-{
-}
-
-void PendSV_Handler(void)
 {
 }
 
 void SysTick_Handler(void)
 {
   HAL_IncTick();
+
+  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
+  {
+    xPortSysTickHandler();
+  }
 }
 
 /* STM32G4xx Peripheral Interrupt Handlers -----------------------------------*/
@@ -152,6 +152,14 @@ void TIM1_BRK_TIM15_IRQHandler(void)
 void TIM1_UP_TIM16_IRQHandler(void)
 {
   HAL_TIM_IRQHandler(&htim1);
+}
+
+/**
+  * @brief USART1 global interrupt.
+  */
+void USART1_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&huart1);
 }
 
 /**

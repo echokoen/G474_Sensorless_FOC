@@ -33,6 +33,7 @@ typedef struct
     uint32_t repeat_tick;
 } BSP_KeyRepeatState_t;
 
+static volatile uint8_t s_startStopRequest = 0u;
 static uint32_t g_key_last_tick = 0u;
 static BSP_KeyRepeatState_t g_key0_state = {0};
 static BSP_KeyRepeatState_t g_key1_state = {0};
@@ -161,22 +162,19 @@ void BSP_KEY_EXTI_Callback(uint16_t GPIO_Pin)
     }
 
     g_key_last_tick = now_tick;
+    s_startStopRequest = 1u;
+}
 
-    /* 直接依据当前状态决定启停，避免上电自动启动后状态不同步。 */
-    if (AppFoc_GetState() == FOC_STATE_IDLE)
-    {
-        AppFoc_Start();
-#if (APP_KEY_PRINT_ENABLE != 0u)
-        printf("[KEY] AppFoc_Start()\r\n");
-#endif
-    }
-    else
-    {
-        AppFoc_Stop();
-#if (APP_KEY_PRINT_ENABLE != 0u)
-        printf("[KEY] AppFoc_Stop()\r\n");
-#endif
-    }
+uint8_t BSP_KEY_ConsumeStartStopRequest(void)
+{
+    uint8_t request;
+
+    __disable_irq();
+    request = s_startStopRequest;
+    s_startStopRequest = 0u;
+    __enable_irq();
+
+    return request;
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
