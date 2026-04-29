@@ -164,7 +164,8 @@ d轴电流环稳定，但带宽比q轴低。
 
 ####3000转速下，电流环轨迹＆电压限幅边界
 
-![image-20260430020904852](C:\Users\10095\AppData\Roaming\Typora\typora-user-images\image-20260430020904852.png)
+<img width="813" height="615" alt="image" src="https://github.com/user-attachments/assets/aa29852c-5c38-497b-b5e1-b2d58335774e" />
+
 
 3000rpm + 5A iq 时，|vdq| 接近并触及电压限幅，limit_flag 有动作。
 
